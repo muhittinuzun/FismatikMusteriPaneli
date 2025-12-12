@@ -78,81 +78,194 @@
             return data.candidates?.[0]?.content?.parts?.[0]?.text || "Yanıt alınamadı.";
         };
 
-        const Login = ({ onLogin }) => {
-            const [email, setEmail] = useState('');
-            const [password, setPassword] = useState('');
-            const [loading, setLoading] = useState(false);
-            const [error, setError] = useState('');
-            const [info, setInfo] = useState('');
-            const [view, setView] = useState('login');
+        // --- ALT BİLEŞENLER (Önce Tanımlanmalı) ---
 
-            const handleLogin = async (e) => {
-                e.preventDefault();
-                setLoading(true);
-                setError('');
-                const { data, error } = await sb.auth.signInWithPassword({ email, password });
-                if (error) setError("Giriş başarısız: " + error.message);
-                setLoading(false);
-            };
+        const StatCard = ({ title, value, icon, color, bg }) => (
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div className={`p-4 rounded-full ${bg} ${color}`}><Icon name={icon} size={24} /></div>
+                <div><p className="text-slate-500 text-sm font-medium">{title}</p><p className="text-2xl font-bold text-slate-800">{value}</p></div>
+            </div>
+        );
 
-            const handleResetPassword = async (e) => {
-                e.preventDefault();
-                setLoading(true);
-                setError('');
-                setInfo('');
+        const ReceiptsTable = ({ receipts, loading, simple, supabase, refresh, onLocalUpdate }) => {
+            const [editItem, setEditItem] = useState(null);
+            const [isSaving, setIsSaving] = useState(false);
+            const [filters, setFilters] = useState({ tarih: '', isletme_adi: '', toplam_tutar: '', durum: '' });
+
+            const filtered = useMemo(() => {
+                if (simple) return receipts;
+                return receipts.filter(r => {
+                    return (!filters.tarih || r.tarih?.includes(filters.tarih)) &&
+                           (!filters.isletme_adi || r.isletme_adi?.toLowerCase().includes(filters.isletme_adi.toLowerCase())) &&
+                           (!filters.toplam_tutar || r.toplam_tutar?.toString().includes(filters.toplam_tutar)) &&
+                           (!filters.durum || r.durum?.includes(filters.durum));
+                });
+            }, [receipts, filters, simple]);
+
+            const handleSave = async () => {
+                setIsSaving(true);
                 
-                try {
-                    const response = await fetch(N8N_RESET_PASSWORD_WEBHOOK, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email: email })
-                    });
+                // İyimser Güncelleme
+                const updatedItem = { ...editItem };
+                if(onLocalUpdate) onLocalUpdate(updatedItem);
+                
+                setEditItem(null); 
 
-                    if (response.ok) {
-                        setInfo("✅ Şifre sıfırlama talebiniz alındı. Lütfen e-posta kutunuzu (ve spam klasörünü) kontrol ediniz.");
-                    } else {
-                        throw new Error("Sunucuya ulaşılamadı, lütfen daha sonra tekrar deneyin.");
+                try {
+                    const { error } = await supabase.from('fisler').update({
+                        isletme_adi: updatedItem.isletme_adi,
+                        toplam_tutar: parseFloat(updatedItem.toplam_tutar),
+                        tarih: updatedItem.tarih,
+                        durum: updatedItem.durum,
+                        ocr_detaylari: updatedItem.ocr_detaylari
+                    }).eq('id', updatedItem.id);
+
+                    if (error) {
+                        alert("Hata: " + error.message);
+                        if (refresh) refresh(); 
                     }
-                } catch (err) {
-                    setError("Hata: " + err.message);
+                } catch (e) {
+                    alert("Kayıt hatası: " + e.message);
+                    if (refresh) refresh();
                 } finally {
-                    setLoading(false);
+                    setIsSaving(false);
                 }
             };
 
+            const addLine = () => setEditItem({ ...editItem, ocr_detaylari: [...(editItem.ocr_detaylari||[]), {aciklama:'', kdv:18, tutar:0}] });
+            const removeLine = (idx) => {
+                const lines = [...editItem.ocr_detaylari];
+                lines.splice(idx, 1);
+                setEditItem({ ...editItem, ocr_detaylari: lines });
+            };
+            const updateLine = (idx, key, val) => {
+                const lines = [...editItem.ocr_detaylari];
+                lines[idx][key] = val;
+                setEditItem({ ...editItem, ocr_detaylari: lines });
+            };
+
+            if (loading) return <div className="p-8 text-center text-slate-400">Yükleniyor...</div>;
+            if (receipts.length === 0) return <div className="p-8 text-center text-slate-400">Veri yok.</div>;
+
             return (
-                <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
-                    <div className="glass-panel p-8 rounded-2xl shadow-xl w-full max-w-sm">
-                        <div className="flex justify-center mb-4 text-primary"><Icon name="receipt" size={48} /></div>
-                        <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">FişMatik</h1>
-                        <p className="text-center text-slate-500 text-sm mb-6">Akıllı Müşteri Paneli</p>
-                        
-                        {view === 'login' ? (
-                            <form onSubmit={handleLogin} className="space-y-4">
-                                <input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary outline-none" required />
-                                <input type="password" placeholder="Şifre" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary outline-none" required />
-                                {error && <p className="text-red-500 text-xs">{error}</p>}
-                                <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center">{loading ? <Icon name="loader-2" className="loading-spin" /> : 'Giriş Yap'}</button>
-                                <div className="text-center mt-4">
-                                    <button type="button" onClick={() => setView('forgot')} className="text-xs text-primary hover:underline">Şifremi Unuttum</button>
-                                </div>
-                            </form>
-                        ) : (
-                            <form onSubmit={handleResetPassword} className="space-y-4">
-                                <div className="text-center mb-4">
-                                    <h3 className="font-semibold text-slate-700">Şifre Sıfırlama</h3>
-                                    <p className="text-xs text-slate-500">E-posta adresinizi girin, size yeni bir şifre gönderelim.</p>
-                                </div>
-                                <input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary outline-none" required />
-                                {error && <p className="text-red-500 text-xs">{error}</p>}
-                                {info && <div className="text-green-700 text-xs bg-green-50 p-3 rounded border border-green-200">{info}</div>}
-                                <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center">{loading ? <Icon name="loader-2" className="loading-spin" /> : 'Sıfırlama Talebi Gönder'}</button>
-                                <div className="text-center mt-4">
-                                    <button type="button" onClick={() => setView('login')} className="text-xs text-slate-500 hover:text-slate-700">Giriş Ekranına Dön</button>
-                                </div>
-                            </form>
-                        )}
+                <>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-slate-50 text-slate-500 uppercase text-xs sticky top-0">
+                                <tr>
+                                    <th className="px-6 py-3">Tarih</th>
+                                    <th className="px-6 py-3">İşletme</th>
+                                    <th className="px-6 py-3">Tutar</th>
+                                    <th className="px-6 py-3">Durum</th>
+                                    {!simple && <th className="px-6 py-3 text-right">İşlem</th>}
+                                </tr>
+                                {!simple && (
+                                    <tr className="bg-slate-100">
+                                        <th className="px-2"><input placeholder="Yıl-Ay-Gün" className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, tarih:e.target.value})}/></th>
+                                        <th className="px-2"><input placeholder="Ara..." className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, isletme_adi:e.target.value})}/></th>
+                                        <th className="px-2"><input placeholder="Tutar..." className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, toplam_tutar:e.target.value})}/></th>
+                                        <th className="px-2">
+                                            <select className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, durum:e.target.value})}>
+                                                <option value="">Hepsi</option><option value="beklemede">Beklemede</option><option value="onaylandi">Onaylandı</option>
+                                            </select>
+                                        </th>
+                                        <th></th>
+                                    </tr>
+                                )}
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {filtered.map(r => (
+                                    <tr key={r.id} className="hover:bg-slate-50 transition group">
+                                        <td className="px-6 py-4">{new Date(r.tarih).toLocaleDateString('tr-TR')}</td>
+                                        <td className="px-6 py-4 font-medium">{r.isletme_adi}</td>
+                                        <td className="px-6 py-4 font-bold">{r.toplam_tutar?.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td>
+                                        <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs ${r.durum==='onaylandi'?'bg-green-100 text-green-800':'bg-yellow-100 text-yellow-800'}`}>{r.durum}</span></td>
+                                        {!simple && <td className="px-6 py-4 text-right"><button onClick={()=>setEditItem(JSON.parse(JSON.stringify(r)))} className="text-primary hover:bg-blue-50 p-2 rounded"><Icon name="pencil" size={16}/></button></td>}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
+
+                    {editItem && (
+                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white w-full max-w-6xl h-[90vh] rounded-xl flex overflow-hidden shadow-2xl">
+                                <div className="w-1/2 bg-slate-900 flex items-center justify-center relative p-4">
+                                    {editItem.gorsel_url ? 
+                                        <img src={editItem.gorsel_url} className="max-w-full max-h-full object-contain" /> : 
+                                        <p className="text-white">Görsel Yok</p>
+                                    }
+                                    {editItem.gorsel_url && <a href={editItem.gorsel_url} target="_blank" className="absolute top-4 right-4 bg-white/10 p-2 rounded text-white"><Icon name="external-link" size={20}/></a>}
+                                </div>
+                                <div className="w-1/2 flex flex-col bg-white">
+                                    <div className="p-4 border-b flex justify-between items-center">
+                                        <h3 className="font-bold text-lg">Fiş Detayları</h3>
+                                        <button onClick={()=>setEditItem(null)}><Icon name="x"/></button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div><label className="text-xs text-slate-500">İşletme</label><input className="w-full border p-2 rounded" value={editItem.isletme_adi} onChange={e=>setEditItem({...editItem, isletme_adi:e.target.value})} /></div>
+                                            <div><label className="text-xs text-slate-500">Tarih</label><input type="datetime-local" className="w-full border p-2 rounded" value={editItem.tarih ? editItem.tarih.slice(0,16) : ''} onChange={e=>setEditItem({...editItem, tarih:e.target.value})} /></div>
+                                            <div><label className="text-xs text-slate-500">Tutar</label><input type="number" step="0.01" className="w-full border p-2 rounded font-bold" value={editItem.toplam_tutar} onChange={e=>setEditItem({...editItem, toplam_tutar:e.target.value})} /></div>
+                                            <div><label className="text-xs text-slate-500">Durum</label><select className="w-full border p-2 rounded" value={editItem.durum} onChange={e=>setEditItem({...editItem, durum:e.target.value})}><option value="beklemede">Beklemede</option><option value="onaylandi">Onaylandı</option></select></div>
+                                        </div>
+                                        <hr/>
+                                        <div>
+                                            <div className="flex justify-between mb-2">
+                                                <h4 className="font-bold text-sm">Harcama Kalemleri</h4>
+                                                <button onClick={addLine} className="text-xs bg-blue-50 text-primary px-2 py-1 rounded">+ Ekle</button>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500"><div className="col-span-6">Açıklama</div><div className="col-span-2">KDV</div><div className="col-span-3">Tutar</div></div>
+                                                {(editItem.ocr_detaylari || []).map((line, i) => (
+                                                    <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                                                        <div className="col-span-6"><input className="w-full border-b outline-none text-sm" value={line.aciklama||line.UrunTuru||''} onChange={e=>updateLine(i,'aciklama',e.target.value)} /></div>
+                                                        <div className="col-span-2"><input type="number" className="w-full border-b outline-none text-sm" value={line.kdv||line.KDVOrani||0} onChange={e=>updateLine(i,'kdv',e.target.value)} /></div>
+                                                        <div className="col-span-3"><input type="number" className="w-full border-b outline-none text-sm" value={line.tutar||line.Tutar_KDVDahil||0} onChange={e=>updateLine(i,'tutar',e.target.value)} /></div>
+                                                        <div className="col-span-1 text-right"><button onClick={()=>removeLine(i)} className="text-red-400 hover:text-red-600"><Icon name="trash-2" size={14}/></button></div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="p-4 border-t flex justify-end gap-2">
+                                        <button onClick={()=>setEditItem(null)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded">İptal</button>
+                                        <button onClick={handleSave} disabled={isSaving} className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2">
+                                            {isSaving ? <><Icon name="loader-2" className="loading-spin"/> Kaydediliyor...</> : 'Kaydet'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
+            );
+        };
+
+        const ReportCard = ({ user, profile }) => {
+            const [dates, setDates] = useState({ start: '', end: '' });
+            const [loading, setLoading] = useState(false);
+            const sendReport = async () => {
+                if(!dates.start || !dates.end) return alert("Tarih seçiniz.");
+                setLoading(true);
+                try {
+                    await fetch(N8N_REPORT_WEBHOOK, { method: 'POST', body: JSON.stringify({ userId: user.id, companyId: profile?.company_id, ...dates }) });
+                    alert("✅ Rapor isteği başarıyla gönderildi!");
+                } catch { alert("Hata oluştu."); }
+                setLoading(false);
+            };
+            return (
+                <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm text-center">
+                    <div className="inline-block p-4 bg-blue-50 rounded-full text-primary mb-4"><Icon name="mail" size={32} /></div>
+                    <h2 className="text-xl font-bold text-slate-800 mb-2">Rapor Oluştur</h2>
+                    <p className="text-slate-500 mb-6">Seçtiğiniz tarih aralığındaki harcamalar Excel olarak e-postanıza gönderilecektir.</p>
+                    <div className="flex gap-4 mb-6">
+                        <div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Başlangıç</label><input type="date" className="w-full border p-2 rounded mt-1" onChange={e=>setDates({...dates, start:e.target.value})} /></div>
+                        <div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Bitiş</label><input type="date" className="w-full border p-2 rounded mt-1" onChange={e=>setDates({...dates, end:e.target.value})} /></div>
+                    </div>
+                    <button onClick={sendReport} disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center gap-2">
+                        {loading ? 'Gönderiliyor...' : <><Icon name="send" size={18} /> Raporu E-Postala</>}
+                    </button>
                 </div>
             );
         };
@@ -165,31 +278,15 @@
             const [passLoading, setPassLoading] = useState(false);
             const [passMsg, setPassMsg] = useState({ type: '', text: '' });
 
-            const saveSettings = () => {
-                localStorage.setItem('gemini_key', apiKey);
-                setSaved(true); setTimeout(() => setSaved(false), 2000);
-            };
-
+            const saveSettings = () => { localStorage.setItem('gemini_key', apiKey); setSaved(true); setTimeout(() => setSaved(false), 2000); };
             const handleChangePassword = async (e) => {
                 e.preventDefault();
-                if (newPassword !== confirmPassword) {
-                    setPassMsg({ type: 'error', text: 'Şifreler eşleşmiyor.' });
-                    return;
-                }
-                if (newPassword.length < 6) {
-                    setPassMsg({ type: 'error', text: 'Şifre en az 6 karakter olmalı.' });
-                    return;
-                }
-                setPassLoading(true);
-                setPassMsg({ type: '', text: '' });
+                if (newPassword !== confirmPassword) { setPassMsg({ type: 'error', text: 'Şifreler eşleşmiyor.' }); return; }
+                if (newPassword.length < 6) { setPassMsg({ type: 'error', text: 'Şifre en az 6 karakter olmalı.' }); return; }
+                setPassLoading(true); setPassMsg({ type: '', text: '' });
                 const { error } = await sb.auth.updateUser({ password: newPassword });
-                if (error) {
-                    setPassMsg({ type: 'error', text: 'Hata: ' + error.message });
-                } else {
-                    setPassMsg({ type: 'success', text: 'Şifreniz başarıyla güncellendi.' });
-                    setNewPassword('');
-                    setConfirmPassword('');
-                }
+                if (error) setPassMsg({ type: 'error', text: 'Hata: ' + error.message });
+                else { setPassMsg({ type: 'success', text: 'Şifre güncellendi.' }); setNewPassword(''); setConfirmPassword(''); }
                 setPassLoading(false);
             };
 
@@ -224,67 +321,113 @@
             );
         };
 
+        const Login = ({ onLogin }) => {
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+            const [info, setInfo] = useState('');
+            const [view, setView] = useState('login');
+
+            const handleLogin = async (e) => {
+                e.preventDefault(); setLoading(true); setError('');
+                const { data, error } = await sb.auth.signInWithPassword({ email, password });
+                if (error) setError("Giriş başarısız: " + error.message);
+                setLoading(false);
+            };
+
+            const handleReset = async (e) => {
+                e.preventDefault(); setLoading(true); setError(''); setInfo('');
+                try {
+                    const res = await fetch(N8N_RESET_PASSWORD_WEBHOOK, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email }) });
+                    if (res.ok) setInfo("✅ Sıfırlama talebi gönderildi."); else throw new Error("Sunucu hatası.");
+                } catch (e) { setError(e.message); }
+                setLoading(false);
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+                    <div className="glass-panel p-8 rounded-2xl shadow-xl w-full max-w-sm">
+                        <div className="flex justify-center mb-4 text-primary"><Icon name="receipt" size={48} /></div>
+                        <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">FişMatik</h1>
+                        {view==='login' ? (
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg outline-none" required />
+                                <input type="password" placeholder="Şifre" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-3 border rounded-lg outline-none" required />
+                                {error && <p className="text-red-500 text-xs">{error}</p>}
+                                <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center">{loading ? <Icon name="loader-2" className="loading-spin"/> : 'Giriş Yap'}</button>
+                                <div className="text-center mt-2"><button type="button" onClick={()=>setView('forgot')} className="text-xs text-primary hover:underline">Şifremi Unuttum</button></div>
+                            </form>
+                        ) : (
+                            <form onSubmit={handleReset} className="space-y-4">
+                                <h3 className="text-center font-bold text-slate-700">Şifre Sıfırlama</h3>
+                                <input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg outline-none" required />
+                                {info && <p className="text-green-600 text-xs">{info}</p>}
+                                {error && <p className="text-red-500 text-xs">{error}</p>}
+                                <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg">{loading ? <Icon name="loader-2" className="loading-spin"/> : 'Link Gönder'}</button>
+                                <div className="text-center mt-2"><button type="button" onClick={()=>setView('login')} className="text-xs text-slate-500">Geri Dön</button></div>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- DASHBOARD (ANA BİLEŞEN) ---
         const Dashboard = ({ user, profile, supabase, onLogout }) => {
-            const [view, setView] = useState('dashboard'); 
+            const [view, setView] = useState('dashboard');
             const [receipts, setReceipts] = useState([]);
-            const [stats, setStats] = useState({ total: 0, count: 0, pending: 0 });
             const [loading, setLoading] = useState(true);
+            const [stats, setStats] = useState({ total:0, count:0, pending:0 });
             const [aiAnalysis, setAiAnalysis] = useState(null);
             const [aiLoading, setAiLoading] = useState(false);
-            
-            // VERİ ÇEKME FONKSİYONU (DÜZELTİLDİ: Sonsuz döngü engellendi)
+
+            // Veri Çekme - Hata Yönetimi ve Profil/Kullanıcı Kontrolü
             const fetchData = useCallback(async () => {
-                // Kullanıcı ID'si yoksa işlem yapma
-                if (!user?.id) return;
+                if(!user?.id) return;
                 
                 setLoading(true);
                 try {
-                    let query = supabase.from('fisler').select('*').order('tarih', { ascending: false });
+                    let q = sb.from('fisler').select('*').order('tarih', { ascending: false });
                     
                     if (profile?.company_id) {
-                        query = query.eq('company_id', profile.company_id);
+                        q = q.eq('company_id', profile.company_id);
                     } else {
-                        // Profil yüklenemese bile (bireysel kullanıcı) kendi yüklediği fişleri görsün
-                        query = query.eq('user_id', user.id);
+                        q = q.eq('user_id', user.id);
                     }
 
-                    const { data, error } = await query;
+                    const { data, error } = await q;
 
                     if (!error) {
                         setReceipts(data || []);
-                        const total = (data || []).reduce((acc, r) => acc + (r.toplam_tutar || 0), 0);
-                        const pending = (data || []).filter(r => r.durum === 'raporlanmadı').length;
-                        setStats({ total, count: data?.length || 0, pending });
+                        const total = (data||[]).reduce((a,b)=>a+(b.toplam_tutar||0),0);
+                        const pending = (data||[]).filter(r=>r.durum==='beklemede').length;
+                        setStats({ total, count: data.length, pending });
                     }
-                } catch (err) {
-                    console.error("Veri hatası:", err);
-                } finally {
-                    setLoading(false);
-                }
-            }, [user?.id, profile?.company_id]); 
+                } catch(e) { console.error(e); }
+                setLoading(false);
+            }, [user?.id, profile?.company_id]);
+
+            // Yerel (Optimistic) Güncelleme
+            const handleLocalUpdate = (updatedItem) => {
+                setReceipts(prev => prev.map(r => r.id === updatedItem.id ? updatedItem : r));
+            };
 
             const runAiAnalysis = async () => {
                 const apiKey = localStorage.getItem('gemini_key');
-                if (!apiKey) return alert("Lütfen Ayarlar sayfasından Gemini API anahtarınızı giriniz.");
-                if (receipts.length === 0) return alert("Analiz için veri bulunamadı.");
+                if(!apiKey) return alert("API Anahtarı eksik.");
                 setAiLoading(true);
-                const analysisData = {
-                    toplam: stats.total, adet: stats.count, bekleyen: stats.pending,
-                    ozet: receipts.slice(0, 15).map(r => ({ t: r.tarih?.slice(0, 10), m: r.isletme_adi, p: r.toplam_tutar }))
-                };
-                const prompt = `Finans asistanısın. Türkçe analiz yap. Veri: ${JSON.stringify(analysisData)}. 1. Harcama özeti. 2. Anomali var mı? 3. Tavsiye. Markdown kullan.`;
+                const data = { total: stats.total, count: stats.count, recent: receipts.slice(0,10) };
+                const prompt = `Analiz et: ${JSON.stringify(data)}. Türkçe, Markdown.`;
                 try {
-                    const result = await callGemini(apiKey, prompt);
-                    setAiAnalysis(result);
-                } catch (e) { alert("AI Hatası: " + e.message); } finally { setAiLoading(false); }
+                    const res = await callGemini(apiKey, prompt);
+                    setAiAnalysis(res);
+                } catch(e) { alert(e.message); }
+                setAiLoading(false);
             };
 
-            // Sadece ID'ler değiştiğinde çalışır
-            useEffect(() => { 
-                fetchData(); 
-            }, [fetchData]); 
-
-            useEffect(() => { lucide.createIcons(); }, [view, receipts, loading, aiAnalysis]);
+            useEffect(() => { fetchData(); }, [fetchData]);
+            useEffect(() => { lucide.createIcons(); }, [view, receipts, aiAnalysis]);
 
             return (
                 <div className="min-h-screen flex flex-col md:flex-row">
@@ -294,149 +437,71 @@
                             <span className="font-bold text-lg text-slate-800">FişMatik</span>
                         </div>
                         <nav className="flex-1 p-4 space-y-1">
-                            {[{id:'dashboard',icon:'layout-dashboard',label:'Genel Bakış'},{id:'receipts',icon:'file-text',label:'Fişlerim'},{id:'reports',icon:'bar-chart-3',label:'Raporlar'},{id:'settings',icon:'settings',label:'Ayarlar'}].map(item=><button key={item.id} onClick={()=>setView(item.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view===item.id?'bg-blue-50 text-primary':'text-slate-600 hover:bg-slate-50'}`}><Icon name={item.icon} size={18}/> {item.label}</button>)}
+                            {['dashboard','receipts','reports','settings'].map(v => (
+                                <button key={v} onClick={()=>setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view===v?'bg-blue-50 text-primary':'text-slate-600 hover:bg-slate-50'}`}>
+                                    <Icon name={v==='dashboard'?'layout-dashboard':v==='receipts'?'file-text':v==='reports'?'bar-chart-3':'settings'} size={18}/> 
+                                    {v==='dashboard'?'Genel Bakış':v==='receipts'?'Fişlerim':v==='reports'?'Raporlar':'Ayarlar'}
+                                </button>
+                            ))}
                         </nav>
-                        <div className="p-4 border-t border-slate-100">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-primary font-bold">{(profile?.full_name || user.email)[0].toUpperCase()}</div>
-                                <div className="overflow-hidden">
-                                    <p className="text-xs font-medium text-slate-700 truncate">{profile?.full_name || user.email}</p>
-                                    <p className="text-xs text-slate-400">Şirket ID: {profile?.company_id || '-'}</p>
-                                </div>
+                        <div className="p-4 border-t">
+                            <div className="mb-4 text-xs text-slate-500">
+                                <p className="font-bold text-slate-800 truncate">{profile?.full_name || user.email}</p>
+                                <p>Şirket ID: {profile?.company_id || '-'}</p>
                             </div>
-                            <button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16}/> Çıkış Yap</button>
+                            <button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16}/> Çıkış</button>
                         </div>
                     </aside>
                     <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen bg-slate-50">
-                        {view === 'dashboard' && (
+                        {view==='dashboard' && (
                             <div className="space-y-6">
-                                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4"><h2 className="text-2xl font-bold text-slate-800">Hoş Geldiniz, {profile?.full_name?.split(' ')[0] || 'Kullanıcı'} 👋</h2><button onClick={runAiAnalysis} disabled={aiLoading} className={`px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-lg shadow-md hover:shadow-lg transition flex items-center gap-2 text-sm font-medium ${aiLoading?'opacity-75 cursor-not-allowed':'hover:scale-105'}`}>{aiLoading?<Icon name="loader-2" className="loading-spin"/>:<Icon name="sparkles"/>}{aiLoading?'Analiz Ediliyor...':'Yapay Zeka Analizi Başlat'}</button></div>
-                                {aiAnalysis && <div className="bg-white p-6 rounded-xl border border-violet-100 shadow-sm ai-glow relative overflow-hidden"><div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><Icon name="bot" size={100} className="text-violet-600"/></div><div className="flex items-center gap-2 mb-4 text-violet-700"><Icon name="brain-circuit" size={24}/><h3 className="font-bold text-lg">Finansal Asistan Görüşü</h3></div><div className="text-sm text-slate-600 leading-relaxed markdown-body" dangerouslySetInnerHTML={{__html: marked.parse(aiAnalysis)}}></div><button onClick={()=>setAiAnalysis(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><Icon name="x" size={20}/></button></div>}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><StatCard title="Toplam Harcama" value={stats.total.toLocaleString('tr-TR',{style:'currency',currency:'TRY'})} icon="wallet" color="text-green-600" bg="bg-green-50"/><StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50"/><StatCard title="Onay Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50"/></div>
-                                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm"><div className="flex justify-between items-center mb-4"><h3 className="font-semibold text-slate-700">Son Hareketler</h3><button onClick={()=>setView('receipts')} className="text-sm text-primary hover:underline">Tümünü Gör</button></div><ReceiptsTable receipts={receipts.slice(0,5)} loading={loading} simple={true}/></div>
+                                <div className="flex justify-between items-center"><h2 className="text-2xl font-bold">Hoş Geldiniz</h2><button onClick={runAiAnalysis} disabled={aiLoading} className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded shadow flex gap-2 items-center">{aiLoading?<Icon name="loader-2" className="loading-spin"/>:<Icon name="sparkles"/>} Analiz</button></div>
+                                {aiAnalysis && <div className="bg-white p-6 rounded border border-violet-100 shadow ai-glow relative"><div className="text-sm markdown-body" dangerouslySetInnerHTML={{__html:marked.parse(aiAnalysis)}}></div><button onClick={()=>setAiAnalysis(null)} className="absolute top-4 right-4"><Icon name="x"/></button></div>}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <StatCard title="Toplam Harcama" value={stats.total.toLocaleString('tr-TR',{style:'currency',currency:'TRY'})} icon="wallet" color="text-green-600" bg="bg-green-50"/>
+                                    <StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50"/>
+                                    <StatCard title="Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50"/>
+                                </div>
+                                <div className="bg-white p-6 rounded border shadow-sm">
+                                    <h3 className="font-bold mb-4">Son Hareketler</h3>
+                                    <ReceiptsTable receipts={receipts.slice(0,5)} loading={loading} simple={true} />
+                                </div>
                             </div>
                         )}
-                        {view === 'receipts' && <div className="space-y-6"><div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-slate-800">Fiş Kayıtları</h2><button onClick={fetchData} className="p-2 text-slate-500 hover:text-primary"><Icon name="refresh-ccw" /></button></div><div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"><ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData}/></div></div>}
-                        {view === 'reports' && <div className="max-w-xl mx-auto mt-10"><ReportCard user={user} profile={profile}/></div>}
-                        {view === 'settings' && <Settings user={user} />}
+                        {view==='receipts' && (
+                            <div className="bg-white rounded border shadow-sm p-4 h-full flex flex-col">
+                                <div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Fiş Kayıtları</h2><button onClick={fetchData}><Icon name="refresh-ccw"/></button></div>
+                                <ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData} onLocalUpdate={handleLocalUpdate} />
+                            </div>
+                        )}
+                        {view==='reports' && <div className="max-w-xl mx-auto mt-10"><ReportCard user={user} profile={profile}/></div>}
+                        {view==='settings' && <Settings />}
                     </main>
                 </div>
             );
         };
 
-        const StatCard = ({ title, value, icon, color, bg }) => (<div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4"><div className={`p-4 rounded-full ${bg} ${color}`}><Icon name={icon} size={24}/></div><div><p className="text-slate-500 text-sm font-medium">{title}</p><p className="text-2xl font-bold text-slate-800">{value}</p></div></div>);
-
-        const ReceiptsTable = ({ receipts, loading, simple, supabase, refresh }) => {
-            const [editItem, setEditItem] = useState(null);
-            const [filters, setFilters] = useState({ tarih: '', isletme_adi: '', toplam_tutar: '', durum: '' });
-            const filteredReceipts = useMemo(() => {
-                if (simple) return receipts;
-                return receipts.filter(r => {
-                    const matchTarih = !filters.tarih || (r.tarih && r.tarih.includes(filters.tarih));
-                    const matchIsletme = !filters.isletme_adi || (r.isletme_adi && r.isletme_adi.toLowerCase().includes(filters.isletme_adi.toLowerCase()));
-                    const matchTutar = !filters.toplam_tutar || (r.toplam_tutar && r.toplam_tutar.toString().includes(filters.toplam_tutar));
-                    const matchDurum = !filters.durum || (r.durum && r.durum.toLowerCase().includes(filters.durum.toLowerCase()));
-                    return matchTarih && matchIsletme && matchTutar && matchDurum;
-                });
-            }, [receipts, filters, simple]);
-            const handleSave = async () => { try { const { error } = await supabase.from('fisler').update({ isletme_adi: editItem.isletme_adi, toplam_tutar: parseFloat(editItem.toplam_tutar), tarih: editItem.tarih, durum: editItem.durum, ocr_detaylari: editItem.ocr_detaylari }).eq('id', editItem.id); if (error) throw error; setEditItem(null); refresh(); } catch (e) { alert("Kayıt hatası: " + e.message); } };
-            const addLineItem = () => { setEditItem({ ...editItem, ocr_detaylari: [...(editItem.ocr_detaylari || []), { aciklama: '', kdv: 18, tutar: 0 }] }); };
-            const removeLineItem = (index) => { const n = [...editItem.ocr_detaylari]; n.splice(index, 1); setEditItem({ ...editItem, ocr_detaylari: n }); };
-            const updateLineItem = (index, field, value) => { const n = [...editItem.ocr_detaylari]; n[index][field] = value; setEditItem({ ...editItem, ocr_detaylari: n }); };
-            if (loading) return <div className="p-8 text-center text-slate-400">Yükleniyor...</div>;
-            if (receipts.length === 0) return <div className="p-8 text-center text-slate-400">Kayıt bulunamadı.</div>;
-            return (
-                <>
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 text-slate-500 uppercase text-xs sticky top-0">
-                            <tr><th className="px-6 py-3">Tarih</th><th className="px-6 py-3">İşletme</th><th className="px-6 py-3">Tutar</th><th className="px-6 py-3">Durum</th>{!simple && <th className="px-6 py-3 text-right">İşlem</th>}</tr>
-                            {!simple && (<tr className="bg-slate-100"><th className="px-2 py-2"><input placeholder="Yıl-Ay-Gün" className="w-full p-1 border rounded font-normal" value={filters.tarih} onChange={e=>setFilters({...filters, tarih: e.target.value})} /></th><th className="px-2 py-2"><input placeholder="Ara..." className="w-full p-1 border rounded font-normal" value={filters.isletme_adi} onChange={e=>setFilters({...filters, isletme_adi: e.target.value})} /></th><th className="px-2 py-2"><input placeholder="Tutar..." className="w-full p-1 border rounded font-normal" value={filters.toplam_tutar} onChange={e=>setFilters({...filters, toplam_tutar: e.target.value})} /></th><th className="px-2 py-2"><select className="w-full p-1 border rounded font-normal" value={filters.durum} onChange={e=>setFilters({...filters, durum: e.target.value})}><option value="">Hepsi</option><option value="raporlanmadı">Raporlanmadı</option><option value="onaylandi">Onaylandı</option><option value="aktarildi">Aktarıldı</option></select></th><th></th></tr>)}
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {filteredReceipts.map(r => (<tr key={r.id} className="hover:bg-slate-50 transition group"><td className="px-6 py-4 text-slate-600 whitespace-nowrap">{new Date(r.tarih).toLocaleDateString('tr-TR')}<div className="text-xs text-slate-400">{new Date(r.tarih).toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})}</div></td><td className="px-6 py-4 font-medium text-slate-900 flex items-center gap-2">{r.gorsel_url && <a href={r.gorsel_url} target="_blank" className="text-blue-400 hover:text-blue-600"><Icon name="image" size={16}/></a>}{r.isletme_adi}</td><td className="px-6 py-4 font-bold text-slate-800">{r.toplam_tutar?.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td><td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${r.durum === 'onaylandi' ? 'bg-green-100 text-green-700' : r.durum === 'aktarildi' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>{r.durum.toUpperCase()}</span></td>{!simple && (<td className="px-6 py-4 text-right"><button onClick={()=>setEditItem(JSON.parse(JSON.stringify(r)))} className="text-primary hover:bg-blue-50 p-2 rounded transition"><Icon name="pencil" size={16} /></button></td>)}</tr>))}
-                        </tbody>
-                    </table>
-                    {editItem && (
-                        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"><div className="bg-white rounded-xl w-full max-w-6xl h-[90vh] flex shadow-2xl overflow-hidden"><div className="w-1/2 bg-slate-900 flex items-center justify-center relative p-4">{editItem.gorsel_url ? <img src={editItem.gorsel_url} className="max-w-full max-h-full object-contain rounded" /> : <div className="text-slate-500 flex flex-col items-center"><Icon name="image-off" size={48} /><p>Görsel Yok</p></div>}<a href={editItem.gorsel_url} target="_blank" className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white p-2 rounded backdrop-blur-sm"><Icon name="external-link" size={20}/></a></div><div className="w-1/2 flex flex-col h-full"><div className="p-6 border-b flex justify-between items-center bg-white"><h3 className="text-xl font-bold text-slate-800">Fiş Detayları</h3><button onClick={()=>setEditItem(null)}><Icon name="x" className="text-slate-400 hover:text-slate-600"/></button></div><div className="flex-1 overflow-y-auto p-6 space-y-6"><div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-semibold text-slate-500 uppercase">İşletme Adı</label><input className="w-full border p-2 rounded mt-1 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary outline-none" value={editItem.isletme_adi} onChange={e=>setEditItem({...editItem, isletme_adi: e.target.value})} /></div><div><label className="text-xs font-semibold text-slate-500 uppercase">Tarih</label><input type="datetime-local" className="w-full border p-2 rounded mt-1 bg-slate-50 focus:bg-white" value={editItem.tarih ? editItem.tarih.slice(0,16) : ''} onChange={e=>setEditItem({...editItem, tarih: e.target.value})} /></div><div><label className="text-xs font-semibold text-slate-500 uppercase">Toplam Tutar</label><input type="number" step="0.01" className="w-full border p-2 rounded mt-1 bg-slate-50 focus:bg-white font-bold text-slate-800" value={editItem.toplam_tutar} onChange={e=>setEditItem({...editItem, toplam_tutar: e.target.value})} /></div><div><label className="text-xs font-semibold text-slate-500 uppercase">Durum</label><select className="w-full border p-2 rounded mt-1 bg-slate-50" value={editItem.durum} onChange={e=>setEditItem({...editItem, durum: e.target.value})}><option value="raporlanmadı">Raporlanmadı</option><option value="onaylandi">Onaylandı</option><option value="aktarildi">Aktarıldı</option></select></div></div><hr /><div><div className="flex justify-between items-center mb-2"><label className="text-xs font-semibold text-slate-500 uppercase">Harcama Kalemleri</label><button onClick={addLineItem} className="text-xs bg-blue-50 text-primary px-2 py-1 rounded hover:bg-blue-100 flex items-center gap-1"><Icon name="plus" size={14}/> Ekle</button></div><div className="bg-slate-50 rounded-lg border overflow-hidden"><div className="grid grid-cols-12 gap-2 p-2 bg-slate-100 text-xs font-bold text-slate-500"><div className="col-span-6">Açıklama</div><div className="col-span-2">KDV %</div><div className="col-span-3">Tutar</div><div className="col-span-1"></div></div>{(editItem.ocr_detaylari || []).map((line, idx) => (<div key={idx} className="grid grid-cols-12 gap-2 p-2 border-t border-slate-200 items-center"><div className="col-span-6"><input className="w-full bg-transparent border-b border-transparent focus:border-primary outline-none text-sm" value={line.aciklama || line.UrunTuru || ''} onChange={e => updateLineItem(idx, 'aciklama', e.target.value)} placeholder="Ürün Adı" /></div><div className="col-span-2"><input type="number" className="w-full bg-transparent border-b border-transparent focus:border-primary outline-none text-sm text-center" value={line.kdv || line.KDVOrani || 0} onChange={e => updateLineItem(idx, 'kdv', e.target.value)} /></div><div className="col-span-3"><input type="number" step="0.01" className="w-full bg-transparent border-b border-transparent focus:border-primary outline-none text-sm font-medium" value={line.tutar || line.Tutar_KDVDahil || 0} onChange={e => updateLineItem(idx, 'tutar', e.target.value)} /></div><div className="col-span-1 text-right"><button onClick={()=>removeLineItem(idx)} className="text-slate-400 hover:text-red-500"><Icon name="trash-2" size={16}/></button></div></div>))}</div></div></div><div className="p-4 border-t bg-gray-50 flex justify-end gap-3"><button onClick={()=>setEditItem(null)} className="px-6 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium">Vazgeç</button><button onClick={handleSave} className="px-6 py-2 bg-green-600 text-white hover:bg-green-700 rounded-lg font-medium shadow-md flex items-center gap-2"><Icon name="save" size={18}/> Değişiklikleri Kaydet</button></div></div></div></div>
-                    )}
-                </>
-            );
-        };
-
-        const ReportCard = ({ user, profile }) => {
-            const [dates, setDates] = useState({ start: '', end: '' });
-            const [loading, setLoading] = useState(false);
-            const sendReport = async () => {
-                if(!dates.start || !dates.end) return alert("Tarih seçiniz.");
-                setLoading(true);
-                try {
-                    await fetch(N8N_REPORT_WEBHOOK, { method: 'POST', body: JSON.stringify({ userId: user.id, companyId: profile?.company_id, ...dates }) });
-                    alert("✅ Rapor isteği başarıyla gönderildi!");
-                } catch { alert("Hata oluştu."); }
-                setLoading(false);
-            };
-            return (
-                <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm text-center"><div className="inline-block p-4 bg-blue-50 rounded-full text-primary mb-4"><Icon name="mail" size={32} /></div><h2 className="text-xl font-bold text-slate-800 mb-2">Rapor Oluştur</h2><p className="text-slate-500 mb-6">Seçtiğiniz tarih aralığındaki harcamalar Excel olarak e-postanıza gönderilecektir.</p><div className="flex gap-4 mb-6"><div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Başlangıç</label><input type="date" className="w-full border p-2 rounded mt-1" onChange={e=>setDates({...dates, start:e.target.value})} /></div><div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Bitiş</label><input type="date" className="w-full border p-2 rounded mt-1" onChange={e=>setDates({...dates, end:e.target.value})} /></div></div><button onClick={sendReport} disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center gap-2">{loading ? 'Gönderiliyor...' : <><Icon name="send" size={18} /> Raporu E-Postala</>}</button></div>
-            );
-        }
-
-        // --- UYGULAMA BAŞLAT (GÜNCELLENMİŞ VERSİYON) ---
+        // --- APP ---
         const App = () => {
             const [user, setUser] = useState(null);
             const [profile, setProfile] = useState(null);
-            
-            // Profil Çekme Fonksiyonu (GÜNCELLENDİ: E-posta ile kurtarma eklendi)
-            const fetchProfile = async (currentUser) => {
-                if(!currentUser) return;
-                
-                try {
-                    // 1. Önce ID ile dene
-                    let { data, error } = await sb.from('users').select('*').eq('id', currentUser.id).single();
-                    
-                    // 2. Bulamazsa Email ile dene (Çünkü Auth ID ve Profil ID farklı olabilir)
-                    if (!data || error) {
-                        console.log("Profil ID ile bulunamadı, E-posta ile deneniyor...");
-                        const res = await sb.from('users').select('*').eq('email', currentUser.email).single();
-                        data = res.data;
-                        error = res.error;
-                    }
 
-                    if(data) {
-                        setProfile(data);
-                    } else {
-                        console.warn("Profil bulunamadı:", error);
-                    }
-                } catch(e) { console.error("Profil Hatası:", e); }
+            const fetchProfile = async (u) => {
+                let { data } = await sb.from('users').select('*').eq('id', u.id).single();
+                if(!data) { const res = await sb.from('users').select('*').eq('email', u.email).single(); data = res.data; }
+                if(data) setProfile(data);
             };
 
             useEffect(() => {
-                const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
-                
-                // Sayfa yüklendiğinde
-                sb.auth.getUser().then(({ data }) => { 
-                    if(data.user) {
-                        setUser(data.user);
-                        fetchProfile(data.user); // Profil çek
-                    }
+                sb.auth.getUser().then(({data})=>{ if(data.user) { setUser(data.user); fetchProfile(data.user); } });
+                sb.auth.onAuthStateChange((_, session) => { 
+                    if(session?.user) { setUser(session.user); fetchProfile(session.user); } 
+                    else { setUser(null); setProfile(null); }
                 });
-
-                // Oturum değiştiğinde (Giriş/Çıkış)
-                const { data: authListener } = sb.auth.onAuthStateChange(async (event, session) => {
-                    const u = session?.user ?? null;
-                    setUser(u);
-                    if(u) {
-                        fetchProfile(u); // Profil çek
-                    } else {
-                        setProfile(null);
-                    }
-                });
-                return () => authListener.subscription.unsubscribe();
             }, []);
 
-            const getSupabase = () => createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
-
-            if (!user) return <Login onLogin={(u)=>setUser(u)} />;
-            return <Dashboard user={user} profile={profile} supabase={getSupabase()} onLogout={async () => { await getSupabase().auth.signOut(); setUser(null); }} />;
+            if(!user) return <Login onLogin={()=>{}} />;
+            return <Dashboard user={user} profile={profile} onLogout={()=>sb.auth.signOut()} supabase={sb} />;
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
