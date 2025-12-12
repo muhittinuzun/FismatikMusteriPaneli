@@ -49,14 +49,13 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useCallback } = React;
         const { createClient } = supabase;
 
         // --- SABİT AYARLAR ---
         const DEFAULT_SB_URL = "https://hequoxateionmtfjzkxl.supabase.co";
         const DEFAULT_SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlcXVveGF0ZWlvbm10Zmp6a3hsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTg5MDAsImV4cCI6MjA4MDgzNDkwMH0.aIiIdWw2l7Kcqa4BavNJQ8ARZrdPnmxD8qSMpTlXYhA";
         
-        // n8n Webhook Adresleri
         const N8N_REPORT_WEBHOOK = "https://n8n.ittyazilim.com/webhook/rapor-olustur";
         const N8N_RESET_PASSWORD_WEBHOOK = "https://n8n.ittyazilim.com/webhook/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
 
@@ -85,7 +84,7 @@
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState('');
             const [info, setInfo] = useState('');
-            const [view, setView] = useState('login'); // 'login' or 'forgot'
+            const [view, setView] = useState('login');
 
             const handleLogin = async (e) => {
                 e.preventDefault();
@@ -93,7 +92,6 @@
                 setError('');
                 const { data, error } = await sb.auth.signInWithPassword({ email, password });
                 if (error) setError("Giriş başarısız: " + error.message);
-                // onLogin App componentinde session listener ile tetiklenecek
                 setLoading(false);
             };
 
@@ -104,7 +102,6 @@
                 setInfo('');
                 
                 try {
-                    // Supabase yerine n8n Webhook'u tetikliyoruz
                     const response = await fetch(N8N_RESET_PASSWORD_WEBHOOK, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -163,8 +160,6 @@
         const Settings = ({ user }) => {
             const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_key') || '');
             const [saved, setSaved] = useState(false);
-            
-            // Şifre Değiştirme State'leri
             const [newPassword, setNewPassword] = useState('');
             const [confirmPassword, setConfirmPassword] = useState('');
             const [passLoading, setPassLoading] = useState(false);
@@ -185,12 +180,9 @@
                     setPassMsg({ type: 'error', text: 'Şifre en az 6 karakter olmalı.' });
                     return;
                 }
-
                 setPassLoading(true);
                 setPassMsg({ type: '', text: '' });
-
                 const { error } = await sb.auth.updateUser({ password: newPassword });
-
                 if (error) {
                     setPassMsg({ type: 'error', text: 'Hata: ' + error.message });
                 } else {
@@ -203,7 +195,6 @@
 
             return (
                 <div className="max-w-2xl mx-auto mt-10 space-y-8">
-                    {/* Gemini Ayarları */}
                     <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
                         <div className="flex items-center gap-3 mb-6">
                             <div className="p-3 bg-slate-100 rounded-full text-slate-600"><Icon name="sparkles" size={24} /></div>
@@ -217,32 +208,16 @@
                             <button onClick={saveSettings} className="px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition flex items-center gap-2">{saved ? <Icon name="check" size={18} /> : <Icon name="save" size={18} />} {saved ? 'Kaydedildi' : 'Kaydet'}</button>
                         </div>
                     </div>
-
-                    {/* Şifre Değiştirme */}
                     <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
                         <div className="flex items-center gap-3 mb-6">
                             <div className="p-3 bg-slate-100 rounded-full text-slate-600"><Icon name="lock" size={24} /></div>
                             <div><h2 className="text-xl font-bold text-slate-800">Güvenlik</h2><p className="text-sm text-slate-500">Şifrenizi güncelleyin</p></div>
                         </div>
                         <form onSubmit={handleChangePassword} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Yeni Şifre</label>
-                                <input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary outline-none" required />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Yeni Şifre (Tekrar)</label>
-                                <input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary outline-none" required />
-                            </div>
-                            
-                            {passMsg.text && (
-                                <div className={`p-3 rounded text-sm ${passMsg.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                                    {passMsg.text}
-                                </div>
-                            )}
-
-                            <button disabled={passLoading} className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
-                                {passLoading ? <Icon name="loader-2" className="loading-spin" /> : 'Şifreyi Güncelle'}
-                            </button>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">Yeni Şifre</label><input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary outline-none" required /></div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">Yeni Şifre (Tekrar)</label><input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary outline-none" required /></div>
+                            {passMsg.text && (<div className={`p-3 rounded text-sm ${passMsg.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{passMsg.text}</div>)}
+                            <button disabled={passLoading} className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">{passLoading ? <Icon name="loader-2" className="loading-spin" /> : 'Şifreyi Güncelle'}</button>
                         </form>
                     </div>
                 </div>
@@ -257,16 +232,19 @@
             const [aiAnalysis, setAiAnalysis] = useState(null);
             const [aiLoading, setAiLoading] = useState(false);
             
-            const fetchData = async () => {
-                if (!profile?.company_id && !user?.id) return; 
-                setLoading(true);
+            // VERİ ÇEKME FONKSİYONU (DÜZELTİLDİ: Sonsuz döngü engellendi)
+            const fetchData = useCallback(async () => {
+                // Kullanıcı ID'si yoksa işlem yapma
+                if (!user?.id) return;
                 
+                setLoading(true);
                 try {
                     let query = supabase.from('fisler').select('*').order('tarih', { ascending: false });
                     
                     if (profile?.company_id) {
                         query = query.eq('company_id', profile.company_id);
                     } else {
+                        // Profil yüklenemese bile (bireysel kullanıcı) kendi yüklediği fişleri görsün
                         query = query.eq('user_id', user.id);
                     }
 
@@ -283,7 +261,7 @@
                 } finally {
                     setLoading(false);
                 }
-            };
+            }, [user?.id, profile?.company_id]); 
 
             const runAiAnalysis = async () => {
                 const apiKey = localStorage.getItem('gemini_key');
@@ -301,7 +279,11 @@
                 } catch (e) { alert("AI Hatası: " + e.message); } finally { setAiLoading(false); }
             };
 
-            useEffect(() => { fetchData(); }, [profile, user]); 
+            // Sadece ID'ler değiştiğinde çalışır
+            useEffect(() => { 
+                fetchData(); 
+            }, [fetchData]); 
+
             useEffect(() => { lucide.createIcons(); }, [view, receipts, loading, aiAnalysis]);
 
             return (
@@ -334,7 +316,7 @@
                                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm"><div className="flex justify-between items-center mb-4"><h3 className="font-semibold text-slate-700">Son Hareketler</h3><button onClick={()=>setView('receipts')} className="text-sm text-primary hover:underline">Tümünü Gör</button></div><ReceiptsTable receipts={receipts.slice(0,5)} loading={loading} simple={true}/></div>
                             </div>
                         )}
-                        {view === 'receipts' && <div className="space-y-6"><div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-slate-800">Fiş Kayıtları</h2><button onClick={fetchData} className="p-2 text-slate-500 hover:text-primary"><Icon name="refresh-ccw" /></button></div><div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"><ReceiptsTable receipts={receipts} loading={loading} supabase={supabase} refresh={fetchData}/></div></div>}
+                        {view === 'receipts' && <div className="space-y-6"><div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-slate-800">Fiş Kayıtları</h2><button onClick={fetchData} className="p-2 text-slate-500 hover:text-primary"><Icon name="refresh-ccw" /></button></div><div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"><ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData}/></div></div>}
                         {view === 'reports' && <div className="max-w-xl mx-auto mt-10"><ReportCard user={user} profile={profile}/></div>}
                         {view === 'settings' && <Settings user={user} />}
                     </main>
@@ -403,37 +385,38 @@
             const [user, setUser] = useState(null);
             const [profile, setProfile] = useState(null);
             
-            // Profil Çekme Fonksiyonu (Hem ID hem Email dener)
+            // Profil Çekme Fonksiyonu (GÜNCELLENDİ: E-posta ile kurtarma eklendi)
             const fetchProfile = async (currentUser) => {
                 if(!currentUser) return;
                 
                 try {
-                    // 1. Önce ID ile dene (En doğrusu budur)
+                    // 1. Önce ID ile dene
                     let { data, error } = await sb.from('users').select('*').eq('id', currentUser.id).single();
                     
-                    // 2. Bulamazsa Email ile dene (Yedek Plan)
+                    // 2. Bulamazsa Email ile dene (Çünkü Auth ID ve Profil ID farklı olabilir)
                     if (!data || error) {
-                        console.log("ID ile bulunamadı, E-posta ile deneniyor...");
+                        console.log("Profil ID ile bulunamadı, E-posta ile deneniyor...");
                         const res = await sb.from('users').select('*').eq('email', currentUser.email).single();
                         data = res.data;
                         error = res.error;
                     }
 
                     if(data) {
-                        console.log("Profil Yüklendi:", data);
                         setProfile(data);
                     } else {
-                        console.warn("Profil hala bulunamadı. Lütfen veritabanını kontrol edin.", error);
+                        console.warn("Profil bulunamadı:", error);
                     }
-                } catch(e) { console.error("Kritik Hata:", e); }
+                } catch(e) { console.error("Profil Hatası:", e); }
             };
 
             useEffect(() => {
-                // Sayfa ilk açıldığında
+                const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
+                
+                // Sayfa yüklendiğinde
                 sb.auth.getUser().then(({ data }) => { 
                     if(data.user) {
                         setUser(data.user);
-                        fetchProfile(data.user);
+                        fetchProfile(data.user); // Profil çek
                     }
                 });
 
@@ -441,8 +424,11 @@
                 const { data: authListener } = sb.auth.onAuthStateChange(async (event, session) => {
                     const u = session?.user ?? null;
                     setUser(u);
-                    if(u) fetchProfile(u);
-                    else setProfile(null);
+                    if(u) {
+                        fetchProfile(u); // Profil çek
+                    } else {
+                        setProfile(null);
+                    }
                 });
                 return () => authListener.subscription.unsubscribe();
             }, []);
