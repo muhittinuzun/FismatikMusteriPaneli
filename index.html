@@ -115,6 +115,14 @@
                 
                 // İyimser Güncelleme
                 const updatedItem = { ...editItem };
+                
+                // Genel Kategoriyi Satırlardan Türet (Otomatik)
+                const categories = updatedItem.ocr_detaylari?.map(l => l.kategori).filter(Boolean);
+                const uniqueCategories = [...new Set(categories)];
+                const mainCategory = uniqueCategories.length > 1 ? 'Çoklu' : (uniqueCategories[0] || 'Genel');
+                
+                updatedItem.kategori = mainCategory;
+
                 if(onLocalUpdate) onLocalUpdate(updatedItem);
                 
                 setEditItem(null); 
@@ -125,8 +133,8 @@
                         toplam_tutar: parseFloat(updatedItem.toplam_tutar),
                         tarih: updatedItem.tarih,
                         durum: updatedItem.durum,
-                        kategori: updatedItem.kategori, // Kategori Güncelleme
-                        ocr_detaylari: updatedItem.ocr_detaylari
+                        kategori: mainCategory, // Otomatik hesaplanan kategori
+                        ocr_detaylari: updatedItem.ocr_detaylari // Satır detayları (içinde kategori var)
                     }).eq('id', updatedItem.id);
 
                     if (error) {
@@ -141,7 +149,7 @@
                 }
             };
 
-            const addLine = () => setEditItem({ ...editItem, ocr_detaylari: [...(editItem.ocr_detaylari||[]), {aciklama:'', kdv:18, tutar:0}] });
+            const addLine = () => setEditItem({ ...editItem, ocr_detaylari: [...(editItem.ocr_detaylari||[]), {aciklama:'', kategori:'', kdv:18, tutar:0}] });
             const removeLine = (idx) => {
                 const lines = [...editItem.ocr_detaylari];
                 lines.splice(idx, 1);
@@ -230,27 +238,6 @@
                                             <div><label className="text-xs text-slate-500">Tarih</label><input type="datetime-local" className="w-full border p-2 rounded" value={editItem.tarih ? editItem.tarih.slice(0,16) : ''} onChange={e=>setEditItem({...editItem, tarih:e.target.value})} /></div>
                                             <div><label className="text-xs text-slate-500">Tutar</label><input type="number" step="0.01" className="w-full border p-2 rounded font-bold" value={editItem.toplam_tutar} onChange={e=>setEditItem({...editItem, toplam_tutar:e.target.value})} /></div>
                                             <div><label className="text-xs text-slate-500">Durum</label><select className="w-full border p-2 rounded" value={editItem.durum} onChange={e=>setEditItem({...editItem, durum:e.target.value})}><option value="beklemede">Beklemede</option><option value="onaylandi">Onaylandı</option></select></div>
-                                            
-                                            {/* KATEGORİ ALANI */}
-                                            <div className="col-span-2">
-                                                <label className="text-xs text-slate-500">Kategori</label>
-                                                <div className="flex gap-2">
-                                                    <select className="w-full border p-2 rounded" value={editItem.kategori || ''} onChange={e=>setEditItem({...editItem, kategori:e.target.value})}>
-                                                        <option value="">Seçiniz</option>
-                                                        <option value="Yemek">Yemek</option>
-                                                        <option value="Market">Market</option>
-                                                        <option value="Yakıt">Yakıt</option>
-                                                        <option value="Konaklama">Konaklama</option>
-                                                        <option value="Ulaşım">Ulaşım</option>
-                                                        <option value="Giyim">Giyim</option>
-                                                        <option value="Kırtasiye">Kırtasiye</option>
-                                                        <option value="Teknoloji">Teknoloji</option>
-                                                        <option value="Diğer">Diğer</option>
-                                                    </select>
-                                                    <input placeholder="Manuel Giriş" className="w-1/3 border p-2 rounded" value={editItem.kategori || ''} onChange={e=>setEditItem({...editItem, kategori:e.target.value})} />
-                                                </div>
-                                            </div>
-
                                         </div>
                                         <hr/>
                                         <div>
@@ -259,12 +246,33 @@
                                                 <button onClick={addLine} className="text-xs bg-blue-50 text-primary px-2 py-1 rounded">+ Ekle</button>
                                             </div>
                                             <div className="space-y-2">
-                                                <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500"><div className="col-span-6">Açıklama</div><div className="col-span-2">KDV</div><div className="col-span-3">Tutar</div></div>
+                                                <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500">
+                                                    <div className="col-span-4">Açıklama</div>
+                                                    <div className="col-span-3">Kategori</div>
+                                                    <div className="col-span-2">KDV</div>
+                                                    <div className="col-span-2">Tutar</div>
+                                                    <div className="col-span-1"></div>
+                                                </div>
                                                 {(editItem.ocr_detaylari || []).map((line, i) => (
                                                     <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                                                        <div className="col-span-6"><input className="w-full border-b outline-none text-sm" value={line.aciklama||line.UrunTuru||''} onChange={e=>updateLine(i,'aciklama',e.target.value)} /></div>
+                                                        <div className="col-span-4"><input className="w-full border-b outline-none text-sm" value={line.aciklama||line.UrunTuru||''} onChange={e=>updateLine(i,'aciklama',e.target.value)} placeholder="Ürün adı"/></div>
+                                                        <div className="col-span-3">
+                                                            <select className="w-full border-b outline-none text-sm bg-transparent cursor-pointer" value={line.kategori || ''} onChange={e=>updateLine(i,'kategori',e.target.value)}>
+                                                                <option value="">Seçiniz</option>
+                                                                <option value="Yemek">Yemek</option>
+                                                                <option value="Market">Market</option>
+                                                                <option value="Yakıt">Yakıt</option>
+                                                                <option value="Konaklama">Konaklama</option>
+                                                                <option value="Ulaşım">Ulaşım</option>
+                                                                <option value="Giyim">Giyim</option>
+                                                                <option value="Kırtasiye">Kırtasiye</option>
+                                                                <option value="Teknoloji">Teknoloji</option>
+                                                                <option value="Temizlik">Temizlik</option>
+                                                                <option value="Diğer">Diğer</option>
+                                                            </select>
+                                                        </div>
                                                         <div className="col-span-2"><input type="number" className="w-full border-b outline-none text-sm" value={line.kdv||line.KDVOrani||0} onChange={e=>updateLine(i,'kdv',e.target.value)} /></div>
-                                                        <div className="col-span-3"><input type="number" className="w-full border-b outline-none text-sm" value={line.tutar||line.Tutar_KDVDahil||0} onChange={e=>updateLine(i,'tutar',e.target.value)} /></div>
+                                                        <div className="col-span-2"><input type="number" className="w-full border-b outline-none text-sm" value={line.tutar||line.Tutar_KDVDahil||0} onChange={e=>updateLine(i,'tutar',e.target.value)} /></div>
                                                         <div className="col-span-1 text-right"><button onClick={()=>removeLine(i)} className="text-red-400 hover:text-red-600"><Icon name="trash-2" size={14}/></button></div>
                                                     </div>
                                                 ))}
