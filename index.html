@@ -398,26 +398,51 @@
             );
         }
 
-        // --- UYGULAMA BAŞLAT ---
+        // --- UYGULAMA BAŞLAT (GÜNCELLENMİŞ VERSİYON) ---
         const App = () => {
             const [user, setUser] = useState(null);
             const [profile, setProfile] = useState(null);
             
+            // Profil Çekme Fonksiyonu (Hem ID hem Email dener)
+            const fetchProfile = async (currentUser) => {
+                if(!currentUser) return;
+                
+                try {
+                    // 1. Önce ID ile dene (En doğrusu budur)
+                    let { data, error } = await sb.from('users').select('*').eq('id', currentUser.id).single();
+                    
+                    // 2. Bulamazsa Email ile dene (Yedek Plan)
+                    if (!data || error) {
+                        console.log("ID ile bulunamadı, E-posta ile deneniyor...");
+                        const res = await sb.from('users').select('*').eq('email', currentUser.email).single();
+                        data = res.data;
+                        error = res.error;
+                    }
+
+                    if(data) {
+                        console.log("Profil Yüklendi:", data);
+                        setProfile(data);
+                    } else {
+                        console.warn("Profil hala bulunamadı. Lütfen veritabanını kontrol edin.", error);
+                    }
+                } catch(e) { console.error("Kritik Hata:", e); }
+            };
+
             useEffect(() => {
-                const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
-                sb.auth.getUser().then(({ data }) => { if(data.user) setUser(data.user); });
+                // Sayfa ilk açıldığında
+                sb.auth.getUser().then(({ data }) => { 
+                    if(data.user) {
+                        setUser(data.user);
+                        fetchProfile(data.user);
+                    }
+                });
+
+                // Oturum değiştiğinde (Giriş/Çıkış)
                 const { data: authListener } = sb.auth.onAuthStateChange(async (event, session) => {
                     const u = session?.user ?? null;
                     setUser(u);
-                    if(u) {
-                        try {
-                            const { data, error } = await sb.from('users').select('*').eq('id', u.id).single();
-                            if(data) setProfile(data);
-                            else console.warn("Profil bulunamadı:", error);
-                        } catch(e) { console.error(e); }
-                    } else {
-                        setProfile(null);
-                    }
+                    if(u) fetchProfile(u);
+                    else setProfile(null);
                 });
                 return () => authListener.subscription.unsubscribe();
             }, []);
