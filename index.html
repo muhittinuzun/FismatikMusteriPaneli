@@ -57,6 +57,8 @@
         const DEFAULT_SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlcXVveGF0ZWlvbm10Zmp6a3hsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTg5MDAsImV4cCI6MjA4MDgzNDkwMH0.aIiIdWw2l7Kcqa4BavNJQ8ARZrdPnmxD8qSMpTlXYhA";
         
         const N8N_REPORT_WEBHOOK = "https://n8n.ittyazilim.com/webhook/rapor-olustur";
+        const N8N_REPORT_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/fbdbb58e-91f5-4137-891a-339eeb821168";
+        const N8N_REPORT_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/fbdbb58e-91f5-4137-891a-339eeb821168";
         const N8N_RESET_PASSWORD_WEBHOOK = "https://n8n.ittyazilim.com/webhook/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
 
         // Global Supabase Client
@@ -246,13 +248,44 @@
             const [dates, setDates] = useState({ start: '', end: '' });
             const [loading, setLoading] = useState(false);
             const sendReport = async () => {
-                if(!dates.start || !dates.end) return alert("Tarih seçiniz.");
+                if(!dates.start || !dates.end) {
+                    alert("Lütfen tarih aralığı seçiniz.");
+                    return;
+                }
+                
                 setLoading(true);
+                
+                // Payload hazırlama
+                const payload = {
+                    company_id: profile?.company_id || null,
+                    start: dates.start,
+                    end: dates.end
+                };
+                
                 try {
-                    await fetch(N8N_REPORT_WEBHOOK, { method: 'POST', body: JSON.stringify({ userId: user.id, companyId: profile?.company_id, ...dates }) });
-                    alert("✅ Rapor isteği başarıyla gönderildi!");
-                } catch { alert("Hata oluştu."); }
-                setLoading(false);
+                    // Her iki webhook'a da aynı payload gönder
+                    const [testResponse, prodResponse] = await Promise.all([
+                        fetch(N8N_REPORT_WEBHOOK_TEST, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        }),
+                        fetch(N8N_REPORT_WEBHOOK_PROD, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        })
+                    ]);
+                    
+                    // Her iki istek de başarılı olsa da olmasa da mesaj göster
+                    alert("Rapor isteğiniz alındı. Raporunuz hazırlandığında mail adresinize gönderilecektir.");
+                } catch (error) {
+                    console.error("Webhook hatası:", error);
+                    // Hata olsa bile kullanıcıya bilgi ver
+                    alert("Rapor isteğiniz alındı. Raporunuz hazırlandığında mail adresinize gönderilecektir.");
+                } finally {
+                    setLoading(false);
+                }
             };
             return (
                 <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm text-center">
@@ -260,11 +293,11 @@
                     <h2 className="text-xl font-bold text-slate-800 mb-2">Rapor Oluştur</h2>
                     <p className="text-slate-500 mb-6">Seçtiğiniz tarih aralığındaki harcamalar Excel olarak e-postanıza gönderilecektir.</p>
                     <div className="flex gap-4 mb-6">
-                        <div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Başlangıç</label><input type="date" className="w-full border p-2 rounded mt-1" onChange={e=>setDates({...dates, start:e.target.value})} /></div>
-                        <div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Bitiş</label><input type="date" className="w-full border p-2 rounded mt-1" onChange={e=>setDates({...dates, end:e.target.value})} /></div>
+                        <div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Başlangıç</label><input type="date" className="w-full border p-2 rounded mt-1" value={dates.start} onChange={e=>setDates({...dates, start:e.target.value})} /></div>
+                        <div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Bitiş</label><input type="date" className="w-full border p-2 rounded mt-1" value={dates.end} onChange={e=>setDates({...dates, end:e.target.value})} /></div>
                     </div>
                     <button onClick={sendReport} disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center gap-2">
-                        {loading ? 'Gönderiliyor...' : <><Icon name="send" size={18} /> Raporu E-Postala</>}
+                        {loading ? <><Icon name="loader-2" className="loading-spin" size={18} /> Gönderiliyor...</> : <><Icon name="send" size={18} /> Raporu E-Postala</>}
                     </button>
                 </div>
             );
