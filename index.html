@@ -263,19 +263,29 @@
                 };
                 
                 try {
-                    // Her iki webhook'a da aynı payload gönder
-                    const [testResponse, prodResponse] = await Promise.all([
+                    // Her iki webhook'a da aynı payload gönder (CORS hatası olsa bile devam et)
+                    const requests = [
                         fetch(N8N_REPORT_WEBHOOK_TEST, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
+                            body: JSON.stringify(payload),
+                            mode: 'no-cors' // CORS hatasını önlemek için
+                        }).catch(err => {
+                            console.log("Test webhook hatası (beklenen):", err);
+                            return { ok: true }; // CORS hatası olsa bile başarılı say
                         }),
                         fetch(N8N_REPORT_WEBHOOK_PROD, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
+                            body: JSON.stringify(payload),
+                            mode: 'no-cors' // CORS hatasını önlemek için
+                        }).catch(err => {
+                            console.log("Prod webhook hatası (beklenen):", err);
+                            return { ok: true }; // CORS hatası olsa bile başarılı say
                         })
-                    ]);
+                    ];
+                    
+                    await Promise.all(requests);
                     
                     // Her iki istek de başarılı olsa da olmasa da mesaj göster
                     alert("Rapor isteğiniz alındı. Raporunuz hazırlandığında mail adresinize gönderilecektir.");
@@ -520,17 +530,45 @@
             const [profile, setProfile] = useState(null);
 
             const fetchProfile = async (u) => {
-                let { data } = await sb.from('users').select('*').eq('id', u.id).single();
-                if(!data) { const res = await sb.from('users').select('*').eq('email', u.email).single(); data = res.data; }
-                if(data) setProfile(data);
+                try {
+                    let { data, error } = await sb.from('users').select('*').eq('id', u.id).limit(1);
+                    if(error || !data || data.length === 0) { 
+                        const res = await sb.from('users').select('*').eq('email', u.email).limit(1); 
+                        if(res.data && res.data.length > 0) data = res.data;
+                    }
+                    if(data && data.length > 0) setProfile(data[0]);
+                } catch(e) {
+                    console.error("Profil yükleme hatası:", e);
+                }
             };
 
             useEffect(() => {
-                sb.auth.getUser().then(({data})=>{ if(data.user) { setUser(data.user); fetchProfile(data.user); } });
-                sb.auth.onAuthStateChange((_, session) => { 
-                    if(session?.user) { setUser(session.user); fetchProfile(session.user); } 
-                    else { setUser(null); setProfile(null); }
+                let mounted = true;
+                let authSubscription = null;
+                
+                sb.auth.getUser().then(({data})=>{ 
+                    if(mounted && data?.user) { 
+                        setUser(data.user); 
+                        fetchProfile(data.user); 
+                    } 
                 });
+                
+                const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => { 
+                    if(!mounted) return;
+                    if(session?.user) { 
+                        setUser(session.user); 
+                        fetchProfile(session.user); 
+                    } else { 
+                        setUser(null); 
+                        setProfile(null); 
+                    }
+                });
+                authSubscription = subscription;
+                
+                return () => {
+                    mounted = false;
+                    if(authSubscription) authSubscription.unsubscribe();
+                };
             }, []);
 
             if(!user) return <Login onLogin={()=>{}} />;
