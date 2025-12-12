@@ -263,62 +263,40 @@
                 };
                 
                 try {
-                    // Her iki webhook'a da aynı payload gönder
-                    // Her birini ayrı ayrı deneyip hataları yakalıyoruz
-                    const sendWebhook = async (url, name) => {
-                        try {
-                            const response = await fetch(url, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(payload)
-                            });
-                            
-                            if (!response.ok) {
-                                console.warn(`${name} webhook yanıtı: ${response.status} ${response.statusText}`);
-                            } else {
-                                console.log(`${name} webhook başarılı`);
-                            }
-                            return { success: true, name };
-                        } catch (error) {
-                            // CORS hatası veya network hatası
-                            console.warn(`${name} webhook hatası:`, error.message);
-                            
-                            // CORS hatası varsa no-cors modu ile tekrar dene
-                            if (error.message.includes('CORS') || error.message.includes('Failed to fetch')) {
-                                try {
-                                    await fetch(url, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify(payload),
-                                        mode: 'no-cors'
-                                    });
-                                    console.log(`${name} webhook (no-cors modu) gönderildi`);
-                                    return { success: true, name };
-                                } catch (noCorsError) {
-                                    console.warn(`${name} webhook (no-cors) hatası:`, noCorsError.message);
-                                    return { success: false, name, error: noCorsError.message };
-                                }
-                            }
-                            return { success: false, name, error: error.message };
-                        }
-                    };
-                    
-                    // Her iki webhook'u paralel olarak gönder
-                    const results = await Promise.allSettled([
-                        sendWebhook(N8N_REPORT_WEBHOOK_TEST, 'Test'),
-                        sendWebhook(N8N_REPORT_WEBHOOK_PROD, 'Production')
-                    ]);
-                    
-                    // Sonuçları logla
-                    results.forEach((result, index) => {
-                        if (result.status === 'fulfilled') {
-                            console.log(`Webhook ${index + 1} tamamlandı:`, result.value);
+                    // Sadece test webhook'una istek gönder
+                    try {
+                        const response = await fetch(N8N_REPORT_WEBHOOK_TEST, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        
+                        if (!response.ok) {
+                            console.warn(`Test webhook yanıtı: ${response.status} ${response.statusText}`);
                         } else {
-                            console.error(`Webhook ${index + 1} hata:`, result.reason);
+                            console.log(`Test webhook başarılı`);
                         }
-                    });
+                    } catch (error) {
+                        // CORS hatası veya network hatası
+                        console.warn(`Test webhook hatası:`, error.message);
+                        
+                        // CORS hatası varsa no-cors modu ile tekrar dene
+                        if (error.message.includes('CORS') || error.message.includes('Failed to fetch')) {
+                            try {
+                                await fetch(N8N_REPORT_WEBHOOK_TEST, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(payload),
+                                    mode: 'no-cors'
+                                });
+                                console.log(`Test webhook (no-cors modu) gönderildi`);
+                            } catch (noCorsError) {
+                                console.warn(`Test webhook (no-cors) hatası:`, noCorsError.message);
+                            }
+                        }
+                    }
                     
-                    // Her durumda kullanıcıya bilgi ver (webhook'lar arka planda işleniyor olabilir)
+                    // Her durumda kullanıcıya bilgi ver
                     alert("Rapor isteğiniz alındı. Raporunuz hazırlandığında mail adresinize gönderilecektir.");
                 } catch (error) {
                     console.error("Beklenmeyen webhook hatası:", error);
