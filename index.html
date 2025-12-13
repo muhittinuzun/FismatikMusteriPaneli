@@ -56,6 +56,7 @@
         const DEFAULT_SB_URL = "https://hequoxateionmtfjzkxl.supabase.co";
         const DEFAULT_SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlcXVveGF0ZWlvbm10Zmp6a3hsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTg5MDAsImV4cCI6MjA4MDgzNDkwMH0.aIiIdWw2l7Kcqa4BavNJQ8ARZrdPnmxD8qSMpTlXYhA";
         
+        const N8N_REPORT_WEBHOOK = "https://n8n.ittyazilim.com/webhook/rapor-olustur";
         const N8N_REPORT_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/fbdbb58e-91f5-4137-891a-339eeb821168";
         const N8N_RESET_PASSWORD_WEBHOOK = "https://n8n.ittyazilim.com/webhook/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
 
@@ -92,7 +93,7 @@
             const [isSaving, setIsSaving] = useState(false);
             const [filters, setFilters] = useState({ tarih: '', isletme_adi: '', toplam_tutar: '', durum: '', kategori: '' });
 
-            // Modal açıldığında ikonları yeniden yükle (Fix)
+            // Modal açıldığında ikonları yeniden yükle
             useEffect(() => {
                 if (editItem) {
                     lucide.createIcons();
@@ -116,9 +117,12 @@
                 // İyimser Güncelleme
                 const updatedItem = { ...editItem };
                 
-                // Genel Kategoriyi Satırlardan Türet (Otomatik)
-                const categories = updatedItem.ocr_detaylari?.map(l => l.kategori).filter(Boolean);
+                // --- OTOMATİK KATEGORİ BELİRLEME ---
+                // Satırlardaki kategorileri topla
+                const categories = updatedItem.ocr_detaylari?.map(l => l.kategori).filter(Boolean) || [];
                 const uniqueCategories = [...new Set(categories)];
+                
+                // Eğer birden fazla çeşit kategori varsa "Çoklu", yoksa tek olanı, hiç yoksa "Genel"
                 const mainCategory = uniqueCategories.length > 1 ? 'Çoklu' : (uniqueCategories[0] || 'Genel');
                 
                 updatedItem.kategori = mainCategory;
@@ -133,8 +137,8 @@
                         toplam_tutar: parseFloat(updatedItem.toplam_tutar),
                         tarih: updatedItem.tarih,
                         durum: updatedItem.durum,
-                        kategori: mainCategory, // Otomatik hesaplanan kategori
-                        ocr_detaylari: updatedItem.ocr_detaylari // Satır detayları (içinde kategori var)
+                        kategori: mainCategory, // Otomatik hesaplanan ana kategori
+                        ocr_detaylari: updatedItem.ocr_detaylari // Güncellenmiş satır detayları
                     }).eq('id', updatedItem.id);
 
                     if (error) {
@@ -189,6 +193,11 @@
                                                 <option value="Yakıt">Yakıt</option>
                                                 <option value="Konaklama">Konaklama</option>
                                                 <option value="Ulaşım">Ulaşım</option>
+                                                <option value="Giyim">Giyim</option>
+                                                <option value="Kırtasiye">Kırtasiye</option>
+                                                <option value="Teknoloji">Teknoloji</option>
+                                                <option value="Temizlik">Temizlik</option>
+                                                <option value="Çoklu">Çoklu</option>
                                                 <option value="Diğer">Diğer</option>
                                             </select>
                                         </th>
@@ -246,6 +255,7 @@
                                                 <button onClick={addLine} className="text-xs bg-blue-50 text-primary px-2 py-1 rounded">+ Ekle</button>
                                             </div>
                                             <div className="space-y-2">
+                                                {/* TABLO BAŞLIKLARI GÜNCELLENDİ: 12 kolonluk grid */}
                                                 <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500">
                                                     <div className="col-span-4">Açıklama</div>
                                                     <div className="col-span-3">Kategori</div>
@@ -255,7 +265,11 @@
                                                 </div>
                                                 {(editItem.ocr_detaylari || []).map((line, i) => (
                                                     <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                                                        <div className="col-span-4"><input className="w-full border-b outline-none text-sm" value={line.aciklama||line.UrunTuru||''} onChange={e=>updateLine(i,'aciklama',e.target.value)} placeholder="Ürün adı"/></div>
+                                                        {/* Açıklama */}
+                                                        <div className="col-span-4">
+                                                            <input className="w-full border-b outline-none text-sm" value={line.aciklama||line.UrunTuru||''} onChange={e=>updateLine(i,'aciklama',e.target.value)} placeholder="Ürün" />
+                                                        </div>
+                                                        {/* Kategori (Satır Bazlı) */}
                                                         <div className="col-span-3">
                                                             <select className="w-full border-b outline-none text-sm bg-transparent cursor-pointer" value={line.kategori || ''} onChange={e=>updateLine(i,'kategori',e.target.value)}>
                                                                 <option value="">Seçiniz</option>
@@ -271,9 +285,18 @@
                                                                 <option value="Diğer">Diğer</option>
                                                             </select>
                                                         </div>
-                                                        <div className="col-span-2"><input type="number" className="w-full border-b outline-none text-sm" value={line.kdv||line.KDVOrani||0} onChange={e=>updateLine(i,'kdv',e.target.value)} /></div>
-                                                        <div className="col-span-2"><input type="number" className="w-full border-b outline-none text-sm" value={line.tutar||line.Tutar_KDVDahil||0} onChange={e=>updateLine(i,'tutar',e.target.value)} /></div>
-                                                        <div className="col-span-1 text-right"><button onClick={()=>removeLine(i)} className="text-red-400 hover:text-red-600"><Icon name="trash-2" size={14}/></button></div>
+                                                        {/* KDV */}
+                                                        <div className="col-span-2">
+                                                            <input type="number" className="w-full border-b outline-none text-sm" value={line.kdv||line.KDVOrani||0} onChange={e=>updateLine(i,'kdv',e.target.value)} />
+                                                        </div>
+                                                        {/* Tutar */}
+                                                        <div className="col-span-2">
+                                                            <input type="number" className="w-full border-b outline-none text-sm" value={line.tutar||line.Tutar_KDVDahil||0} onChange={e=>updateLine(i,'tutar',e.target.value)} />
+                                                        </div>
+                                                        {/* Sil Butonu */}
+                                                        <div className="col-span-1 text-right">
+                                                            <button onClick={()=>removeLine(i)} className="text-red-400 hover:text-red-600"><Icon name="trash-2" size={14}/></button>
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>
