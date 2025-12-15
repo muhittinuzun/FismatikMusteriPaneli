@@ -66,8 +66,9 @@
         const N8N_REPORT_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/fbdbb58e-91f5-4137-891a-339eeb821168";
         const N8N_REPORT_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/fbdbb58e-91f5-4137-891a-339eeb821168";
 
-        // 2. Şifre Sıfırlama Webhook URLsi (SADECE TEST İSTENDİ)
+        // 2. Şifre Sıfırlama Webhook URLleri (Test ve Canlı)
         const N8N_RESET_PW_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
+        const N8N_RESET_PW_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
 
         // Global Supabase Client
         const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
@@ -534,11 +535,28 @@
             const handleReset = async (e) => {
                 e.preventDefault(); setLoading(true); setError(''); setInfo('');
                 
+                // --- ŞİFRE SIFIRLAMA WEBHOOK MANTIĞI ---
+                // Varsayılan: Localhost ise Test, Sunucu ise Prod
+                const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                
+                // SHIFT TUŞU KONTROLÜ: Eğer butona Shift ile basıldıysa ZORLA TEST URL'sini kullan
+                // Not: e.nativeEvent kontrolü gerekebilir mi? React synthetic event'i shiftKey'i taşır.
+                const forceTest = e && e.shiftKey;
+                
+                let targetUrl;
+                if (forceTest) {
+                    targetUrl = N8N_RESET_PW_WEBHOOK_TEST;
+                    console.log("🛠️ Shift tuşuna basıldı: TEST Webhook zorlandı (Şifre Sıfırlama).");
+                } else {
+                    targetUrl = isLocalhost ? N8N_RESET_PW_WEBHOOK_TEST : N8N_RESET_PW_WEBHOOK_PROD;
+                }
+
+                // Konsola detaylı bilgi yaz
+                console.log(`🚀 Şifre Sıfırlama Hedef: ${forceTest || isLocalhost ? 'TEST' : 'CANLI'}`);
+                console.log("🔗 URL:", targetUrl);
+
                 try {
-                    // --- ŞİFRE SIFIRLAMA WEBHOOK MANTIĞI (SADECE TEST) ---
-                    // Kullanıcı talebine göre sadece TEST webhook'u kullanılacak.
-                    // Prod ortamında bile çalışsa TEST webhook'una gider.
-                    await fetch(N8N_RESET_PW_WEBHOOK_TEST, { 
+                    await fetch(targetUrl, { 
                         method: 'POST', 
                         mode: 'no-cors', 
                         headers: {'Content-Type':'application/json'}, 
@@ -548,7 +566,8 @@
                         }) 
                     });
                     
-                    setInfo("✅ E-posta adresiniz sistemde kayıtlıysa, şifre sıfırlama talimatları gönderilmiştir."); 
+                    const envMsg = forceTest ? "(TEST ORTAMI)" : "";
+                    setInfo(`✅ E-posta adresiniz sistemde kayıtlıysa, şifre sıfırlama talimatları gönderilmiştir. ${envMsg}`); 
                 } catch (e) { 
                     console.error(e);
                     setError("Bağlantı hatası. Lütfen tekrar deneyin."); 
