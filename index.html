@@ -390,7 +390,9 @@
         const ReportCard = ({ user, profile }) => {
             const [dates, setDates] = useState({ start: '', end: '' });
             const [loading, setLoading] = useState(false);
-            const sendReport = async () => {
+            
+            // Modified to accept the event object 'e'
+            const sendReport = async (e) => {
                 if(!dates.start || !dates.end) {
                     alert("Lütfen tarih aralığı seçiniz.");
                     return;
@@ -407,13 +409,23 @@
                     source: 'FisMatik_Panel'
                 };
                 
-                // --- RAPOR WEBHOOK MANTIĞI (DÜZELTİLDİ) ---
-                // Localhost ise Test URL, Canlı sunucu ise Prod URL kullan.
-                const isTestMode = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-                const targetUrl = isTestMode ? N8N_REPORT_WEBHOOK_TEST : N8N_REPORT_WEBHOOK_PROD;
+                // --- RAPOR WEBHOOK MANTIĞI ---
+                // Varsayılan: Localhost ise Test, Sunucu ise Prod
+                const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                
+                // SHIFT TUŞU KONTROLÜ: Eğer butona Shift ile basıldıysa ZORLA TEST URL'sini kullan
+                const forceTest = e && e.shiftKey;
+                
+                let targetUrl;
+                if (forceTest) {
+                    targetUrl = N8N_REPORT_WEBHOOK_TEST;
+                    console.log("🛠️ Shift tuşuna basıldı: TEST Webhook zorlandı.");
+                } else {
+                    targetUrl = isLocalhost ? N8N_REPORT_WEBHOOK_TEST : N8N_REPORT_WEBHOOK_PROD;
+                }
 
                 try {
-                    // no-cors moduyla tek isteği at
+                    // no-cors moduyla isteği at
                     await fetch(targetUrl, {
                         method: 'POST',
                         mode: 'no-cors',
@@ -421,7 +433,8 @@
                         body: JSON.stringify(payload)
                     });
                     
-                    alert("Rapor isteğiniz alındı. Raporunuz hazırlandığında mail adresinize gönderilecektir.");
+                    const envMsg = forceTest ? "(TEST ORTAMI)" : "";
+                    alert(`Rapor isteğiniz alındı ${envMsg}. Raporunuz hazırlandığında mail adresinize gönderilecektir.`);
                 } catch (error) {
                     console.error("Webhook hatası:", error);
                     alert("Rapor isteğiniz alındı. Raporunuz hazırlandığında mail adresinize gönderilecektir.");
@@ -429,6 +442,7 @@
                     setLoading(false);
                 }
             };
+            
             return (
                 <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm text-center">
                     <div className="inline-block p-4 bg-blue-50 rounded-full text-primary mb-4"><Icon name="mail" size={32} /></div>
@@ -438,6 +452,7 @@
                         <div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Başlangıç</label><input type="date" className="w-full border p-2 rounded mt-1" value={dates.start} onChange={e=>setDates({...dates, start:e.target.value})} /></div>
                         <div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Bitiş</label><input type="date" className="w-full border p-2 rounded mt-1" value={dates.end} onChange={e=>setDates({...dates, end:e.target.value})} /></div>
                     </div>
+                    {/* Pass the event object automatically */}
                     <button onClick={sendReport} disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center gap-2">
                         {loading ? <><Icon name="loader-2" className="loading-spin" size={18} /> Gönderiliyor...</> : <><Icon name="send" size={18} /> Raporu E-Postala</>}
                     </button>
