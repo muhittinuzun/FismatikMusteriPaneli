@@ -532,15 +532,18 @@
                 setLoading(false);
             };
 
+            // GÜNCELLENDİ: ŞİFRE SIFIRLAMA
             const handleReset = async (e) => {
-                e.preventDefault(); setLoading(true); setError(''); setInfo('');
+                // Form submit ise engelle
+                if(e && e.preventDefault) e.preventDefault(); 
+                
+                setLoading(true); setError(''); setInfo('');
                 
                 // --- ŞİFRE SIFIRLAMA WEBHOOK MANTIĞI ---
                 // Varsayılan: Localhost ise Test, Sunucu ise Prod
                 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
                 
-                // SHIFT TUŞU KONTROLÜ: Eğer butona Shift ile basıldıysa ZORLA TEST URL'sini kullan
-                // Not: e.nativeEvent kontrolü gerekebilir mi? React synthetic event'i shiftKey'i taşır.
+                // SHIFT TUŞU KONTROLÜ
                 const forceTest = e && e.shiftKey;
                 
                 let targetUrl;
@@ -566,7 +569,13 @@
                         }) 
                     });
                     
+                    // KULLANICIYA TEST MESAJI GÖSTER (EĞER TEST İSE)
                     const envMsg = forceTest ? "(TEST ORTAMI)" : "";
+                    
+                    if(forceTest) {
+                        alert(`Şifre sıfırlama isteği TEST ortamına gönderildi.`);
+                    }
+                    
                     setInfo(`✅ E-posta adresiniz sistemde kayıtlıysa, şifre sıfırlama talimatları gönderilmiştir. ${envMsg}`); 
                 } catch (e) { 
                     console.error(e);
@@ -589,12 +598,28 @@
                                 <div className="text-center mt-2"><button type="button" onClick={()=>setView('forgot')} className="text-xs text-primary hover:underline">Şifremi Unuttum</button></div>
                             </form>
                         ) : (
-                            <form onSubmit={handleReset} className="space-y-4">
+                            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}> 
+                                {/* Form submit'i engelliyoruz, kontrolü manuel yapıyoruz */}
                                 <h3 className="text-center font-bold text-slate-700">Şifre Sıfırlama</h3>
-                                <input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg outline-none" required />
+                                <input 
+                                    type="email" 
+                                    placeholder="E-Posta" 
+                                    value={email} 
+                                    onChange={e=>setEmail(e.target.value)} 
+                                    onKeyDown={(e) => e.key === 'Enter' && handleReset(e)} // Enter desteği
+                                    className="w-full p-3 border rounded-lg outline-none" 
+                                    required 
+                                />
                                 {info && <p className="text-green-600 text-xs">{info}</p>}
                                 {error && <p className="text-red-500 text-xs">{error}</p>}
-                                <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg">{loading ? <Icon name="loader-2" className="loading-spin"/> : 'Link Gönder'}</button>
+                                <button 
+                                    type="button" // Submit değil button
+                                    onClick={handleReset} // Click olayını yakala (shiftKey burada gelir)
+                                    disabled={loading} 
+                                    className="w-full bg-primary text-white py-3 rounded-lg"
+                                >
+                                    {loading ? <Icon name="loader-2" className="loading-spin"/> : 'Link Gönder'}
+                                </button>
                                 <div className="text-center mt-2"><button type="button" onClick={()=>setView('login')} className="text-xs text-slate-500">Geri Dön</button></div>
                             </form>
                         )}
