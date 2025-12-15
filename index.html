@@ -402,7 +402,7 @@
                 
                 // Payload hazırlama
                 const payload = {
-                    company_id: profile?.company_id || null,
+                    company_id: profile?.company_id || user.id, // Fallback to user.id if profile not ready
                     start: dates.start,
                     end: dates.end,
                     email: user.email || 'kullanici@mail.com',
@@ -423,6 +423,11 @@
                 } else {
                     targetUrl = isLocalhost ? N8N_REPORT_WEBHOOK_TEST : N8N_REPORT_WEBHOOK_PROD;
                 }
+                
+                // Konsola detaylı bilgi yaz
+                console.log(`🚀 Gönderilen Hedef: ${forceTest || isLocalhost ? 'TEST' : 'CANLI'}`);
+                console.log("🔗 URL:", targetUrl);
+                console.log("📦 Veri:", payload);
 
                 try {
                     // no-cors moduyla isteği at
