@@ -62,13 +62,12 @@
         const DEFAULT_SB_URL = "https://hequoxateionmtfjzkxl.supabase.co";
         const DEFAULT_SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlcXVveGF0ZWlvbm10Zmp6a3hsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTg5MDAsImV4cCI6MjA4MDgzNDkwMH0.aIiIdWw2l7Kcqa4BavNJQ8ARZrdPnmxD8qSMpTlXYhA";
         
-        // 1. Rapor Webhook URLleri
+        // 1. Rapor Webhook URLleri (Test ve Canlı Ayrımı Var)
         const N8N_REPORT_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/fbdbb58e-91f5-4137-891a-339eeb821168";
         const N8N_REPORT_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/fbdbb58e-91f5-4137-891a-339eeb821168";
 
-        // 2. Şifre Sıfırlama Webhook URLleri
+        // 2. Şifre Sıfırlama Webhook URLsi (SADECE TEST İSTENDİ)
         const N8N_RESET_PW_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
-        const N8N_RESET_PW_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
 
         // Global Supabase Client
         const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
@@ -106,10 +105,12 @@
             // GÖRSEL MANİPÜLASYON STATE'LERİ
             const [imgRotation, setImgRotation] = useState(0);
             const [imgZoom, setImgZoom] = useState(1);
+            // Pan (Kaydırma) State'leri
             const [pan, setPan] = useState({ x: 0, y: 0 });
             const [isDragging, setIsDragging] = useState(false);
             const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
+            // Modal açıldığında state'leri sıfırla
             useEffect(() => {
                 if (editItem) {
                     setImgRotation(0);
@@ -119,12 +120,14 @@
                 }
             }, [editItem]);
 
+            // Zoom/Rotate/Pan değiştiğinde ikonları güncelle
             useEffect(() => {
                 lucide.createIcons();
             }, [imgRotation, imgZoom, pan]);
 
+            // --- PAN HANDLERS ---
             const handleMouseDown = (e) => {
-                e.preventDefault(); 
+                e.preventDefault(); // Resmin native sürüklenmesini engelle
                 setIsDragging(true);
                 setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
             };
@@ -142,26 +145,54 @@
                 setIsDragging(false);
             };
 
+            // Durum Göstergesi (Badge) Fonksiyonu
+            const getStatusBadge = (status) => {
+                const s = status?.toLowerCase() || '';
+                let classes = 'bg-gray-100 text-gray-800';
+                let label = status || '-';
+
+                if (s === 'onaylandi' || s === 'onaylandı') {
+                    classes = 'bg-green-100 text-green-800';
+                    label = 'Onaylandı';
+                } else if (s === 'beklemede') {
+                    classes = 'bg-yellow-100 text-yellow-800';
+                    label = 'Beklemede';
+                } else if (s === 'reddedildi') {
+                    classes = 'bg-red-100 text-red-800';
+                    label = 'Reddedildi';
+                } else if (s === 'mukerrer' || s === 'mükerrer') {
+                    classes = 'bg-orange-100 text-orange-800';
+                    label = 'Mükerrer';
+                }
+
+                return <span className={`px-2 py-1 rounded text-xs font-medium ${classes}`}>{label}</span>;
+            };
+
             const filtered = useMemo(() => {
                 if (simple) return receipts;
                 return receipts.filter(r => {
                     return (!filters.tarih || r.tarih?.includes(filters.tarih)) &&
                            (!filters.isletme_adi || r.isletme_adi?.toLowerCase().includes(filters.isletme_adi.toLowerCase())) &&
                            (!filters.toplam_tutar || r.toplam_tutar?.toString().includes(filters.toplam_tutar)) &&
-                           (!filters.durum || r.durum?.includes(filters.durum)) &&
+                           (!filters.durum || r.durum?.toLowerCase().includes(filters.durum.toLowerCase())) &&
                            (!filters.kategori || r.kategori?.toLowerCase().includes(filters.kategori.toLowerCase()));
                 });
             }, [receipts, filters, simple]);
 
             const handleSave = async () => {
                 setIsSaving(true);
+                
+                // İyimser Güncelleme
                 const updatedItem = { ...editItem };
+                
+                // --- OTOMATİK KATEGORİ BELİRLEME ---
                 const categories = updatedItem.ocr_detaylari?.map(l => l.kategori).filter(Boolean) || [];
                 const uniqueCategories = [...new Set(categories)];
                 const mainCategory = uniqueCategories.length > 1 ? 'Çoklu' : (uniqueCategories[0] || 'Genel');
                 updatedItem.kategori = mainCategory;
 
                 if(onLocalUpdate) onLocalUpdate(updatedItem);
+                
                 setEditItem(null); 
 
                 try {
@@ -232,7 +263,11 @@
                                         <th className="px-2"><input placeholder="Tutar..." className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, toplam_tutar:e.target.value})}/></th>
                                         <th className="px-2">
                                             <select className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, durum:e.target.value})}>
-                                                <option value="">Hepsi</option><option value="beklemede">Beklemede</option><option value="onaylandi">Onaylandı</option>
+                                                <option value="">Hepsi</option>
+                                                <option value="beklemede">Beklemede</option>
+                                                <option value="onaylandi">Onaylandı</option>
+                                                <option value="reddedildi">Reddedildi</option>
+                                                <option value="mukerrer">Mükerrer</option>
                                             </select>
                                         </th>
                                         <th></th>
@@ -246,7 +281,7 @@
                                         <td className="px-6 py-4 font-medium">{r.isletme_adi}</td>
                                         <td className="px-6 py-4 text-slate-500">{r.kategori || '-'}</td>
                                         <td className="px-6 py-4 font-bold">{r.toplam_tutar?.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td>
-                                        <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs ${r.durum==='onaylandi'?'bg-green-100 text-green-800':'bg-yellow-100 text-yellow-800'}`}>{r.durum}</span></td>
+                                        <td className="px-6 py-4">{getStatusBadge(r.durum)}</td>
                                         {!simple && <td className="px-6 py-4 text-right"><button onClick={()=>setEditItem(JSON.parse(JSON.stringify(r)))} className="text-primary hover:bg-blue-50 p-2 rounded"><Icon name="pencil" size={16}/></button></td>}
                                     </tr>
                                 ))}
@@ -258,7 +293,7 @@
                         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
                             <div className="bg-white w-full max-w-6xl h-[90vh] rounded-xl flex overflow-hidden shadow-2xl">
                                 
-                                {/* SOL TARAF: GÖRSEL */}
+                                {/* SOL TARAF: GÖRSEL (DÜZENLENMİŞ) */}
                                 <div 
                                     className="w-1/2 bg-slate-900 flex items-center justify-center relative p-4 overflow-hidden group cursor-move"
                                     onMouseDown={handleMouseDown}
@@ -284,12 +319,14 @@
                                                 <img src={editItem.gorsel_url} className="max-w-full max-h-full object-contain shadow-lg pointer-events-none" />
                                             </div>
                                             
-                                            {/* TOOLBAR */}
+                                            {/* GÖRSEL KONTROL TOOLBAR */}
                                             <div className="absolute bottom-6 flex items-center gap-2 bg-slate-800/90 p-2 rounded-full backdrop-blur-sm border border-white/10 shadow-xl z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" onMouseDown={(e) => e.stopPropagation()}>
                                                 <button onClick={() => setImgZoom(z => Math.max(0.5, z - 0.25))} className="p-2 text-white hover:bg-white/20 rounded-full transition" title="Uzaklaştır"><Icon name="zoom-out" size={18}/></button>
                                                 <span className="text-xs text-slate-400 font-mono w-12 text-center">{Math.round(imgZoom * 100)}%</span>
                                                 <button onClick={() => setImgZoom(z => Math.min(3, z + 0.25))} className="p-2 text-white hover:bg-white/20 rounded-full transition" title="Yakınlaştır"><Icon name="zoom-in" size={18}/></button>
+                                                
                                                 <div className="w-px h-6 bg-white/20 mx-1"></div>
+                                                
                                                 <button onClick={() => { setImgZoom(1); setImgRotation(0); setPan({x:0, y:0}); }} className="p-2 text-white hover:bg-white/20 rounded-full transition" title="Sıfırla"><Icon name="refresh-ccw" size={18}/></button>
                                                 <button onClick={() => setImgRotation(r => r + 90)} className="p-2 text-white hover:bg-white/20 rounded-full transition" title="Sağa Döndür"><Icon name="rotate-cw" size={18}/></button>
                                             </div>
@@ -311,11 +348,23 @@
                                             <div><label className="text-xs text-slate-500">İşletme</label><input className="w-full border p-2 rounded" value={editItem.isletme_adi} onChange={e=>setEditItem({...editItem, isletme_adi:e.target.value})} /></div>
                                             <div><label className="text-xs text-slate-500">Tarih</label><input type="datetime-local" className="w-full border p-2 rounded" value={editItem.tarih ? editItem.tarih.slice(0,16) : ''} onChange={e=>setEditItem({...editItem, tarih:e.target.value})} /></div>
                                             <div><label className="text-xs text-slate-500">Tutar</label><input type="number" step="0.01" className="w-full border p-2 rounded font-bold" value={editItem.toplam_tutar} onChange={e=>setEditItem({...editItem, toplam_tutar:e.target.value})} /></div>
-                                            <div><label className="text-xs text-slate-500">Durum</label><select className="w-full border p-2 rounded" value={editItem.durum} onChange={e=>setEditItem({...editItem, durum:e.target.value})}><option value="beklemede">Beklemede</option><option value="onaylandi">Onaylandı</option></select></div>
+                                            <div><label className="text-xs text-slate-500">Durum</label>
+                                                <select className="w-full border p-2 rounded" value={editItem.durum} onChange={e=>setEditItem({...editItem, durum:e.target.value})}>
+                                                    <option value="beklemede">Beklemede</option>
+                                                    <option value="onaylandi">Onaylandı</option>
+                                                    <option value="reddedildi">Reddedildi</option>
+                                                    <option value="mukerrer">Mükerrer</option>
+                                                </select>
+                                            </div>
+                                            
+                                            {/* KATEGORİ ALANI */}
                                             <div className="col-span-2">
                                                 <label className="text-xs text-slate-500">Genel Kategori (Otomatik)</label>
-                                                <div className="flex gap-2"><input className="w-full border p-2 rounded bg-slate-50 text-slate-500" value={editItem.kategori || 'Otomatik'} disabled /></div>
+                                                <div className="flex gap-2">
+                                                    <input className="w-full border p-2 rounded bg-slate-50 text-slate-500" value={editItem.kategori || 'Otomatik'} disabled />
+                                                </div>
                                             </div>
+
                                         </div>
                                         <hr/>
                                         <div>
@@ -324,6 +373,7 @@
                                                 <button onClick={addLine} className="text-xs bg-blue-50 text-primary px-2 py-1 rounded">+ Ekle</button>
                                             </div>
                                             <div className="space-y-2">
+                                                {/* TABLO BAŞLIKLARI */}
                                                 <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500">
                                                     <div className="col-span-4">Açıklama</div>
                                                     <div className="col-span-3">Kategori</div>
@@ -336,7 +386,17 @@
                                                         <div className="col-span-4"><input className="w-full border-b outline-none text-sm" value={line.aciklama||line.UrunTuru||''} onChange={e=>updateLine(i,'aciklama',e.target.value)} placeholder="Ürün" /></div>
                                                         <div className="col-span-3">
                                                             <select className="w-full border-b outline-none text-sm bg-transparent cursor-pointer" value={line.kategori || ''} onChange={e=>updateLine(i,'kategori',e.target.value)}>
-                                                                <option value="">Seçiniz</option><option value="Yemek">Yemek</option><option value="Market">Market</option><option value="Yakıt">Yakıt</option><option value="Konaklama">Konaklama</option><option value="Ulaşım">Ulaşım</option><option value="Giyim">Giyim</option><option value="Kırtasiye">Kırtasiye</option><option value="Teknoloji">Teknoloji</option><option value="Temizlik">Temizlik</option><option value="Diğer">Diğer</option>
+                                                                <option value="">Seçiniz</option>
+                                                                <option value="Yemek">Yemek</option>
+                                                                <option value="Market">Market</option>
+                                                                <option value="Yakıt">Yakıt</option>
+                                                                <option value="Konaklama">Konaklama</option>
+                                                                <option value="Ulaşım">Ulaşım</option>
+                                                                <option value="Giyim">Giyim</option>
+                                                                <option value="Kırtasiye">Kırtasiye</option>
+                                                                <option value="Teknoloji">Teknoloji</option>
+                                                                <option value="Temizlik">Temizlik</option>
+                                                                <option value="Diğer">Diğer</option>
                                                             </select>
                                                         </div>
                                                         <div className="col-span-2"><input type="number" className="w-full border-b outline-none text-sm" value={line.kdv||line.KDVOrani||0} onChange={e=>updateLine(i,'kdv',e.target.value)} /></div>
@@ -365,6 +425,7 @@
             const [dates, setDates] = useState({ start: '', end: '' });
             const [loading, setLoading] = useState(false);
             
+            // Modified to accept the event object 'e'
             const sendReport = async (e) => {
                 if(!dates.start || !dates.end) {
                     alert("Lütfen tarih aralığı seçiniz.");
@@ -373,35 +434,37 @@
                 
                 setLoading(true);
                 
+                // Payload hazırlama
                 const payload = {
-                    company_id: profile?.company_id || user.id,
+                    company_id: profile?.company_id || null,
                     start: dates.start,
                     end: dates.end,
                     email: user.email || 'kullanici@mail.com',
                     source: 'FisMatik_Panel'
                 };
                 
+                // --- RAPOR WEBHOOK MANTIĞI ---
+                // Varsayılan: Localhost ise Test, Sunucu ise Prod
                 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                
+                // SHIFT TUŞU KONTROLÜ: Eğer butona Shift ile basıldıysa ZORLA TEST URL'sini kullan
                 const forceTest = e && e.shiftKey;
                 
                 let targetUrl;
-                let modeLabel = "CANLI";
-
                 if (forceTest) {
                     targetUrl = N8N_REPORT_WEBHOOK_TEST;
-                    modeLabel = "TEST (Zorlama)";
-                } else if (isLocalhost) {
-                    targetUrl = N8N_REPORT_WEBHOOK_TEST;
-                    modeLabel = "TEST (Localhost)";
+                    console.log("🛠️ Shift tuşuna basıldı: TEST Webhook zorlandı.");
                 } else {
-                    targetUrl = N8N_REPORT_WEBHOOK_PROD;
-                    modeLabel = "CANLI";
+                    targetUrl = isLocalhost ? N8N_REPORT_WEBHOOK_TEST : N8N_REPORT_WEBHOOK_PROD;
                 }
                 
-                console.log(`🚀 İşlem: Rapor Oluşturma | Mod: ${modeLabel}`);
+                // Konsola detaylı bilgi yaz
+                console.log(`🚀 Gönderilen Hedef: ${forceTest || isLocalhost ? 'TEST' : 'CANLI'}`);
                 console.log("🔗 URL:", targetUrl);
+                console.log("📦 Veri:", payload);
 
                 try {
+                    // no-cors moduyla isteği at
                     await fetch(targetUrl, {
                         method: 'POST',
                         mode: 'no-cors',
@@ -409,11 +472,8 @@
                         body: JSON.stringify(payload)
                     });
                     
-                    if(forceTest) {
-                        alert("⚠️ Test Webhook Tetiklendi! (Shift Tuşu Algılandı)");
-                    }
-                    
-                    alert(`Rapor isteğiniz alındı. Raporunuz hazırlandığında mail adresinize gönderilecektir.`);
+                    const envMsg = forceTest ? "(TEST ORTAMI)" : "";
+                    alert(`Rapor isteğiniz alındı ${envMsg}. Raporunuz hazırlandığında mail adresinize gönderilecektir.`);
                 } catch (error) {
                     console.error("Webhook hatası:", error);
                     alert("Rapor isteğiniz alındı. Raporunuz hazırlandığında mail adresinize gönderilecektir.");
@@ -431,6 +491,7 @@
                         <div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Başlangıç</label><input type="date" className="w-full border p-2 rounded mt-1" value={dates.start} onChange={e=>setDates({...dates, start:e.target.value})} /></div>
                         <div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Bitiş</label><input type="date" className="w-full border p-2 rounded mt-1" value={dates.end} onChange={e=>setDates({...dates, end:e.target.value})} /></div>
                     </div>
+                    {/* Pass the event object automatically */}
                     <button onClick={sendReport} disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center gap-2">
                         {loading ? <><Icon name="loader-2" className="loading-spin" size={18} /> Gönderiliyor...</> : <><Icon name="send" size={18} /> Raporu E-Postala</>}
                     </button>
@@ -504,57 +565,23 @@
                 setLoading(false);
             };
 
-            // GÜNCELLENDİ: ŞİFRE SIFIRLAMA
             const handleReset = async (e) => {
-                // Form submit ise engelle
-                if(e && e.preventDefault) e.preventDefault(); 
+                e.preventDefault(); setLoading(true); setError(''); setInfo('');
                 
-                setLoading(true); setError(''); setInfo('');
+                // --- ŞİFRE SIFIRLAMA WEBHOOK MANTIĞI (SADECE TEST) ---
+                // Kullanıcı talebine göre sadece TEST webhook'u kullanılacak.
+                // Prod ortamında bile çalışsa TEST webhook'una gider.
+                await fetch(N8N_RESET_PW_WEBHOOK_TEST, { 
+                    method: 'POST', 
+                    mode: 'no-cors', 
+                    headers: {'Content-Type':'application/json'}, 
+                    body: JSON.stringify({ 
+                        email: email,
+                        source: 'FisMatik_Login_Reset'
+                    }) 
+                });
                 
-                // Varsayılan: Localhost ise Test, Sunucu ise Prod
-                const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-                
-                // SHIFT TUŞU KONTROLÜ
-                const forceTest = e && e.shiftKey;
-                
-                // Hedef URL Belirleme
-                let targetUrl;
-                let modeLabel = "CANLI";
-
-                if (forceTest) {
-                    targetUrl = N8N_RESET_PW_WEBHOOK_TEST;
-                    modeLabel = "TEST (Zorlama)";
-                } else if (isLocalhost) {
-                    targetUrl = N8N_RESET_PW_WEBHOOK_TEST;
-                    modeLabel = "TEST (Localhost)";
-                } else {
-                    targetUrl = N8N_RESET_PW_WEBHOOK_PROD;
-                    modeLabel = "CANLI";
-                }
-
-                console.log(`🚀 İşlem: Şifre Sıfırlama | Mod: ${modeLabel}`);
-                console.log(`🔗 Hedef URL: ${targetUrl}`);
-
-                try {
-                    await fetch(targetUrl, { 
-                        method: 'POST', 
-                        mode: 'no-cors', 
-                        headers: {'Content-Type':'application/json'}, 
-                        body: JSON.stringify({ 
-                            email: email,
-                            source: 'FisMatik_Login_Reset'
-                        }) 
-                    });
-                    
-                    if(forceTest) {
-                        alert("⚠️ Test Webhook Tetiklendi! (Shift Tuşu Algılandı)");
-                    }
-
-                    setInfo("✅ E-posta adresiniz sistemde kayıtlıysa, şifre sıfırlama talimatları gönderilmiştir."); 
-                } catch (e) { 
-                    console.error("Fetch Hatası:", e);
-                    setError("Bağlantı hatası. Lütfen tekrar deneyin."); 
-                }
+                setInfo("✅ E-posta adresiniz sistemde kayıtlıysa, şifre sıfırlama talimatları gönderilmiştir."); 
                 setLoading(false);
             };
 
@@ -572,27 +599,12 @@
                                 <div className="text-center mt-2"><button type="button" onClick={()=>setView('forgot')} className="text-xs text-primary hover:underline">Şifremi Unuttum</button></div>
                             </form>
                         ) : (
-                            <form className="space-y-4" onSubmit={(e)=>e.preventDefault()}>
+                            <form onSubmit={handleReset} className="space-y-4">
                                 <h3 className="text-center font-bold text-slate-700">Şifre Sıfırlama</h3>
-                                <input 
-                                    type="email" 
-                                    placeholder="E-Posta" 
-                                    value={email} 
-                                    onChange={e=>setEmail(e.target.value)} 
-                                    className="w-full p-3 border rounded-lg outline-none" 
-                                    required 
-                                    onKeyDown={(e) => e.key === 'Enter' && handleReset(e)}
-                                />
+                                <input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg outline-none" required />
                                 {info && <p className="text-green-600 text-xs">{info}</p>}
                                 {error && <p className="text-red-500 text-xs">{error}</p>}
-                                <button 
-                                    type="button" 
-                                    onClick={handleReset}
-                                    disabled={loading} 
-                                    className="w-full bg-primary text-white py-3 rounded-lg"
-                                >
-                                    {loading ? <Icon name="loader-2" className="loading-spin"/> : 'Link Gönder'}
-                                </button>
+                                <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg">{loading ? <Icon name="loader-2" className="loading-spin"/> : 'Link Gönder'}</button>
                                 <div className="text-center mt-2"><button type="button" onClick={()=>setView('login')} className="text-xs text-slate-500">Geri Dön</button></div>
                             </form>
                         )}
