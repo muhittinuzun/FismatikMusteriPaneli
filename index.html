@@ -62,11 +62,11 @@
         const DEFAULT_SB_URL = "https://hequoxateionmtfjzkxl.supabase.co";
         const DEFAULT_SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlcXVveGF0ZWlvbm10Zmp6a3hsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTg5MDAsImV4cCI6MjA4MDgzNDkwMH0.aIiIdWw2l7Kcqa4BavNJQ8ARZrdPnmxD8qSMpTlXYhA";
         
-        // 1. Rapor Webhook URLleri (Test ve Canlı Ayrımı Var)
+        // 1. Rapor Webhook URLleri
         const N8N_REPORT_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/fbdbb58e-91f5-4137-891a-339eeb821168";
         const N8N_REPORT_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/fbdbb58e-91f5-4137-891a-339eeb821168";
 
-        // 2. Şifre Sıfırlama Webhook URLleri (Test ve Canlı)
+        // 2. Şifre Sıfırlama Webhook URLleri
         const N8N_RESET_PW_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
         const N8N_RESET_PW_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
 
@@ -95,6 +95,86 @@
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
                 <div className={`p-4 rounded-full ${bg} ${color}`}><Icon name={icon} size={24} /></div>
                 <div><p className="text-slate-500 text-sm font-medium">{title}</p><p className="text-2xl font-bold text-slate-800">{value}</p></div>
+            </div>
+        );
+
+        // --- YENİ: Hakkımızda İçerik Bileşeni (Tekrar kullanılabilir) ---
+        const AboutContent = () => (
+            <div className="space-y-8 text-left">
+                <div className="flex items-start gap-4">
+                    <div className="p-3 bg-blue-100 rounded-lg text-primary mt-1">
+                        <Icon name="zap" size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-800 mb-2">FişMatik Nedir?</h3>
+                        <p className="text-slate-600 leading-relaxed">
+                            FişMatik, işletmelerin ve çalışanların harcama fişlerini yapay zeka destekli OCR teknolojisi ile saniyeler içinde dijitalleştiren, raporlayan ve muhasebeleştiren akıllı bir platformdur. Manuel veri girişini ortadan kaldırır, zamandan tasarruf sağlar.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                    <div className="p-3 bg-green-100 rounded-lg text-green-600 mt-1">
+                        <Icon name="scan-line" size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-800 mb-2">Nasıl Kullanılır?</h3>
+                        <ol className="list-decimal list-inside text-slate-600 space-y-2">
+                            <li>Telegram botumuza fiş fotoğrafını gönderin.</li>
+                            <li>Yapay zeka fişinizi okur ve sisteme kaydeder.</li>
+                            <li>Bu panel üzerinden harcamalarınızı görüntüleyin ve düzenleyin.</li>
+                            <li>Tek tıkla Excel raporunuzu e-posta adresinize alın.</li>
+                        </ol>
+                    </div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                    <div className="p-3 bg-purple-100 rounded-lg text-purple-600 mt-1">
+                        <Icon name="user-plus" size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-800 mb-2">Nasıl Kayıt Olunur?</h3>
+                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                            <p className="text-slate-600 mb-3">
+                                FişMatik şu an davetiye ve başvuru usulü ile çalışmaktadır. Sisteme kayıt olmak ve şirketiniz için aktivasyon sağlamak için lütfen Telegram botumuz üzerinden başvuru yapınız.
+                            </p>
+                            <a href="https://t.me/ITTFisMatikBot" target="_blank" className="inline-flex items-center gap-2 text-primary font-medium hover:underline">
+                                <Icon name="send" size={16} /> FişMatik Telegram Botuna Git
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        // --- YENİ: Hakkımızda Sayfası (Public) ---
+        const AboutPage = ({ onBack }) => (
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+                <div className="max-w-3xl w-full bg-white rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-300">
+                    {/* Header */}
+                    <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 text-center text-white relative">
+                        <button onClick={onBack} className="absolute left-6 top-6 p-2 bg-white/10 hover:bg-white/20 rounded-full transition text-white">
+                            <Icon name="arrow-left" size={24} />
+                        </button>
+                        <div className="flex justify-center mb-4">
+                            <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm">
+                                <Icon name="receipt" size={40} />
+                            </div>
+                        </div>
+                        <h1 className="text-3xl font-bold mb-2">FişMatik</h1>
+                        <p className="text-blue-100">Akıllı Harcama Yönetim Asistanınız</p>
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-8 md:p-12">
+                        <AboutContent />
+                    </div>
+
+                    {/* Footer */}
+                    <div className="bg-slate-50 p-6 text-center border-t border-slate-100 text-slate-500 text-sm">
+                        &copy; 2025 İTT Yazılım. Tüm hakları saklıdır.
+                    </div>
+                </div>
             </div>
         );
 
@@ -574,6 +654,7 @@
                 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
                 
                 // SHIFT TUŞU KONTROLÜ: Eğer butona Shift ile basıldıysa ZORLA TEST URL'sini kullan
+                // Not: e.nativeEvent kontrolü gerekebilir mi? React synthetic event'i shiftKey'i taşır.
                 const forceTest = e && e.shiftKey;
                 
                 let targetUrl;
@@ -610,26 +691,47 @@
 
             return (
                 <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
-                    <div className="glass-panel p-8 rounded-2xl shadow-xl w-full max-w-sm">
-                        <div className="flex justify-center mb-4 text-primary"><Icon name="receipt" size={48} /></div>
-                        <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">FişMatik</h1>
-                        {view==='login' ? (
-                            <form onSubmit={handleLogin} className="space-y-4">
-                                <input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg outline-none" required />
-                                <input type="password" placeholder="Şifre" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-3 border rounded-lg outline-none" required />
+                    <div className="glass-panel p-8 rounded-2xl shadow-xl w-full max-w-sm animate-in fade-in zoom-in duration-300">
+                        {view === 'login' ? (
+                            <>
+                                <div className="flex justify-center mb-4 text-primary"><Icon name="receipt" size={48} /></div>
+                                <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">FişMatik</h1>
+                                <p className="text-center text-slate-500 text-sm mb-6">Akıllı Müşteri Paneline Giriş</p>
+                                
+                                <form onSubmit={handleLogin} className="space-y-4">
+                                    <input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-primary transition" required />
+                                    <input type="password" placeholder="Şifre" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-primary transition" required />
+                                    {error && <p className="text-red-500 text-xs">{error}</p>}
+                                    <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center items-center gap-2">{loading ? <Icon name="loader-2" className="loading-spin" size={18}/> : 'Giriş Yap'}</button>
+                                    <div className="flex justify-between items-center mt-4">
+                                        <button type="button" onClick={()=>setView('forgot')} className="text-xs text-slate-500 hover:text-primary transition">Şifremi Unuttum</button>
+                                        <button type="button" onClick={()=>setView('about')} className="text-xs text-primary font-medium hover:underline">Nedir? / Kayıt Ol</button>
+                                    </div>
+                                </form>
+                            </>
+                        ) : view === 'forgot' ? (
+                            <form onSubmit={handleReset} className="space-y-4">
+                                <div className="flex justify-center mb-4 text-primary"><Icon name="key-round" size={48} /></div>
+                                <h3 className="text-xl font-bold text-center text-slate-800 mb-2">Şifre Sıfırlama</h3>
+                                <p className="text-center text-slate-500 text-sm mb-4">E-posta adresinize sıfırlama talimatlarını göndereceğiz.</p>
+                                
+                                <input type="email" placeholder="E-Posta Adresiniz" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-primary transition" required />
+                                {info && <div className="p-3 bg-green-50 text-green-700 text-xs rounded border border-green-100">{info}</div>}
                                 {error && <p className="text-red-500 text-xs">{error}</p>}
-                                <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center">{loading ? <Icon name="loader-2" className="loading-spin"/> : 'Giriş Yap'}</button>
-                                <div className="text-center mt-2"><button type="button" onClick={()=>setView('forgot')} className="text-xs text-primary hover:underline">Şifremi Unuttum</button></div>
+                                <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center items-center gap-2">{loading ? <Icon name="loader-2" className="loading-spin" size={18}/> : 'Link Gönder'}</button>
+                                <div className="text-center mt-2"><button type="button" onClick={()=>setView('login')} className="text-xs text-slate-500 hover:text-slate-800 transition">Giriş Ekranına Dön</button></div>
                             </form>
                         ) : (
-                            <form onSubmit={handleReset} className="space-y-4">
-                                <h3 className="text-center font-bold text-slate-700">Şifre Sıfırlama</h3>
-                                <input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg outline-none" required />
-                                {info && <p className="text-green-600 text-xs">{info}</p>}
-                                {error && <p className="text-red-500 text-xs">{error}</p>}
-                                <button disabled={loading} onClick={handleReset} className="w-full bg-primary text-white py-3 rounded-lg">{loading ? <Icon name="loader-2" className="loading-spin"/> : 'Link Gönder'}</button>
-                                <div className="text-center mt-2"><button type="button" onClick={()=>setView('login')} className="text-xs text-slate-500">Geri Dön</button></div>
-                            </form>
+                            // Hakkımızda View (Login ekranı içinden erişilen)
+                            <div className="text-left">
+                                <div className="flex items-center gap-2 mb-4 text-primary">
+                                    <button onClick={()=>setView('login')} className="p-1 hover:bg-blue-50 rounded-full"><Icon name="arrow-left" size={20} /></button>
+                                    <span className="font-bold text-lg">Hakkımızda</span>
+                                </div>
+                                <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-6 custom-scrollbar">
+                                    <AboutContent />
+                                </div>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -700,10 +802,10 @@
                             <span className="font-bold text-lg text-slate-800">FişMatik</span>
                         </div>
                         <nav className="flex-1 p-4 space-y-1">
-                            {['dashboard','receipts','reports','settings'].map(v => (
+                            {['dashboard','receipts','reports','settings', 'about'].map(v => (
                                 <button key={v} onClick={()=>setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view===v?'bg-blue-50 text-primary':'text-slate-600 hover:bg-slate-50'}`}>
-                                    <Icon name={v==='dashboard'?'layout-dashboard':v==='receipts'?'file-text':v==='reports'?'bar-chart-3':'settings'} size={18}/> 
-                                    {v==='dashboard'?'Genel Bakış':v==='receipts'?'Fişlerim':v==='reports'?'Raporlar':'Ayarlar'}
+                                    <Icon name={v==='dashboard'?'layout-dashboard':v==='receipts'?'file-text':v==='reports'?'bar-chart-3':v==='settings'?'settings':'info'} size={18}/> 
+                                    {v==='dashboard'?'Genel Bakış':v==='receipts'?'Fişlerim':v==='reports'?'Raporlar':v==='settings'?'Ayarlar':'Hakkında'}
                                 </button>
                             ))}
                         </nav>
@@ -739,6 +841,16 @@
                         )}
                         {view==='reports' && <div className="max-w-xl mx-auto mt-10"><ReportCard user={user} profile={profile}/></div>}
                         {view==='settings' && <Settings />}
+                        {view==='about' && (
+                            <div className="max-w-3xl mx-auto bg-white p-8 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in duration-300">
+                                <div className="text-center mb-8 border-b border-slate-100 pb-6">
+                                    <div className="inline-block p-4 bg-blue-50 rounded-full text-primary mb-4"><Icon name="info" size={32} /></div>
+                                    <h2 className="text-2xl font-bold text-slate-800">Hakkımızda</h2>
+                                    <p className="text-slate-500">FişMatik Platformu Hakkında Bilgiler</p>
+                                </div>
+                                <AboutContent />
+                            </div>
+                        )}
                     </main>
                 </div>
             );
