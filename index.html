@@ -70,9 +70,17 @@
         const N8N_RESET_PW_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
         const N8N_RESET_PW_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
         
-        // YENİ: Kayıt Ol ve Alt Kullanıcı Ekleme Webhookları (Bunları n8n'de oluşturacağız)
-        const N8N_REGISTER_WEBHOOK = "https://n8n.ittyazilim.com/webhook-test/kayit-olustur"; 
-        const N8N_ADD_USER_WEBHOOK = "https://n8n.ittyazilim.com/webhook-test/alt-kullanici-ekle";
+        // 3. KAYIT OL (Register) Webhook URLleri (YENİ)
+        const N8N_REGISTER_URLS = {
+            TEST: "https://n8n.ittyazilim.com/webhook-test/030dfb1b-49f9-4dc8-82e3-98b884f3065c",
+            PROD: "https://n8n.ittyazilim.com/webhook/030dfb1b-49f9-4dc8-82e3-98b884f3065c"
+        };
+        
+        // 4. Alt Kullanıcı Ekleme Webhook URLleri
+        const N8N_ADD_USER_URLS = {
+            TEST: "https://n8n.ittyazilim.com/webhook-test/alt-kullanici-ekle",
+            PROD: "https://n8n.ittyazilim.com/webhook/alt-kullanici-ekle"
+        };
 
         // Global Supabase Client
         const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
@@ -115,13 +123,23 @@
                 if(!profile?.company_id) return;
                 setLoading(true);
                 
-                // Şirket Bilgisi ve Limitleri Çek
-                const { data: comp } = await sb.from('companies').select('*').eq('id', profile.company_id).single();
-                setCompany(comp);
+                try {
+                    // Şirket Bilgisi ve Limitleri Çek
+                    const { data: comp, error: compError } = await sb.from('companies').select('*').eq('id', profile.company_id).single();
+                    
+                    if (compError) {
+                        console.warn("Şirket bilgisi çekilemedi (RLS Hatası Olabilir):", compError);
+                    } else {
+                        console.log("Şirket Bilgisi:", comp);
+                    }
+                    setCompany(comp);
 
-                // Kullanıcıları Çek
-                const { data: team } = await sb.from('users').select('*').eq('company_id', profile.company_id);
-                setUsers(team || []);
+                    // Kullanıcıları Çek
+                    const { data: team } = await sb.from('users').select('*').eq('company_id', profile.company_id);
+                    setUsers(team || []);
+                } catch (err) {
+                    console.error("Ekip verisi hatası:", err);
+                }
                 
                 setLoading(false);
             }, [profile?.company_id]);
@@ -129,17 +147,29 @@
             useEffect(() => { fetchTeam(); }, [fetchTeam]);
 
             const handleAddUser = async () => {
-                if (!company) return;
-                if (users.length >= (company.max_users || 5)) {
-                    alert(`Şirket kullanıcı limitinize (${company.max_users || 5}) ulaştınız.`);
+                // Şirket verisi yüklenememişse işlem yapma ve uyar
+                if (!company) {
+                    alert("Şirket bilgileri yüklenemediği için işlem yapılamıyor. Lütfen veritabanı izinlerini (RLS) kontrol edin.");
+                    return;
+                }
+                
+                // Limit Kontrolü
+                const maxUsers = company.max_users || 5; // Varsayılan 5
+                if (users.length >= maxUsers) {
+                    alert(`Şirket kullanıcı limitinize (${maxUsers}) ulaştınız. Daha fazla kullanıcı ekleyemezsiniz.`);
                     return;
                 }
                 
                 setAdding(true);
+                
+                // Ortam Kontrolü (Test/Prod)
+                const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                const targetUrl = isLocalhost ? N8N_ADD_USER_URLS.TEST : N8N_ADD_USER_URLS.PROD;
+                
                 try {
                     // Client tarafında başka bir kullanıcı oluşturmak oturumu kapatacağı için
                     // bu işlemi n8n webhook üzerinden (Service Role kullanarak) yapıyoruz.
-                    await fetch(N8N_ADD_USER_WEBHOOK, {
+                    await fetch(targetUrl, {
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
@@ -157,7 +187,7 @@
                     setShowAddModal(false);
                     setNewUser({ email: '', full_name: '', password: '', role: 'user' });
                     // Kısa bir bekleme sonrası listeyi yenile
-                    setTimeout(fetchTeam, 2000);
+                    setTimeout(fetchTeam, 3000);
 
                 } catch (error) {
                     alert("Hata: " + error.message);
@@ -174,7 +204,7 @@
                         <div>
                             <h2 className="text-2xl font-bold text-slate-800">Ekip Yönetimi</h2>
                             <p className="text-slate-500 text-sm">
-                                {company?.name} (Kullanıcılar: {users.length} / {company?.max_users || 5})
+                                {company?.name || 'Şirket Yükleniyor...'} (Kullanıcılar: {users.length} / {company?.max_users || '-'})
                             </p>
                         </div>
                         <button 
@@ -243,7 +273,7 @@
             );
         };
 
-        // --- GÜNCELLENEN: Hakkımızda İçerik Bileşeni ---
+        // --- HAKKIMIZDA BİLEŞENİ ---
         const AboutContent = () => (
             <div className="space-y-8 text-left">
                 <div className="flex items-start gap-4">
@@ -305,7 +335,7 @@
             </div>
         );
 
-        // --- YENİ: Hakkımızda Sayfası (Public) ---
+        // --- HAKKIMIZDA SAYFASI (Public) ---
         const AboutPage = ({ onBack }) => (
             <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
                 <div className="max-w-3xl w-full bg-white rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-300">
@@ -339,7 +369,7 @@
         const ReceiptsTable = ({ receipts, loading, simple, supabase, refresh, onLocalUpdate, userRole }) => {
             const [editItem, setEditItem] = useState(null);
             const [isSaving, setIsSaving] = useState(false);
-            const [filters, setFilters] = useState({ tarih: '', isletme_adi: '', toplam_tutar: '', durum: '', kategori: '' });
+            const [filters, setFilters] = useState({ tarih: '', isletme_adi: '', toplam_tutar: '', durum: '', kategori: '', kart_son_4: '' });
             
             // GÖRSEL MANİPÜLASYON STATE'LERİ
             const [imgRotation, setImgRotation] = useState(0);
@@ -414,6 +444,7 @@
                     const matchIsletme = !filters.isletme_adi || r.isletme_adi?.toLowerCase().includes(filters.isletme_adi.toLowerCase());
                     const matchTutar = !filters.toplam_tutar || r.toplam_tutar?.toString().includes(filters.toplam_tutar);
                     const matchKategori = !filters.kategori || r.kategori?.toLowerCase().includes(filters.kategori.toLowerCase());
+                    const matchKart = !filters.kart_son_4 || r.kart_son_4?.toString().includes(filters.kart_son_4);
                     
                     // Durum Filtresi (Güncellenmiş)
                     let matchDurum = true;
@@ -430,7 +461,7 @@
                         }
                     }
 
-                    return matchTarih && matchIsletme && matchTutar && matchDurum && matchKategori;
+                    return matchTarih && matchIsletme && matchTutar && matchDurum && matchKategori && matchKart;
                 });
             }, [receipts, filters, simple]);
 
@@ -496,6 +527,7 @@
                                     <th className="px-6 py-3">Tarih</th>
                                     <th className="px-6 py-3">İşletme</th>
                                     <th className="px-6 py-3">Kategori</th>
+                                    <th className="px-6 py-3">Kart Son 4</th>
                                     <th className="px-6 py-3">Tutar</th>
                                     <th className="px-6 py-3">Durum</th>
                                     {!simple && <th className="px-6 py-3 text-right">İşlem</th>}
@@ -515,6 +547,7 @@
                                                 <option value="Diğer">Diğer</option>
                                             </select>
                                         </th>
+                                        <th className="px-2"><input placeholder="Son 4..." className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, kart_son_4:e.target.value})}/></th>
                                         <th className="px-2"><input placeholder="Tutar..." className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, toplam_tutar:e.target.value})}/></th>
                                         <th className="px-2">
                                             <select className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, durum:e.target.value})}>
@@ -535,6 +568,7 @@
                                         <td className="px-6 py-4">{new Date(r.tarih).toLocaleDateString('tr-TR')}</td>
                                         <td className="px-6 py-4 font-medium">{r.isletme_adi}</td>
                                         <td className="px-6 py-4 text-slate-500">{r.kategori || '-'}</td>
+                                        <td className="px-6 py-4 text-slate-500">{r.kart_son_4 || '-'}</td>
                                         <td className="px-6 py-4 font-bold">{r.toplam_tutar?.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td>
                                         <td className="px-6 py-4">{getStatusBadge(r.durum)}</td>
                                         {!simple && <td className="px-6 py-4 text-right"><button onClick={()=>setEditItem(JSON.parse(JSON.stringify(r)))} className="text-primary hover:bg-blue-50 p-2 rounded"><Icon name="pencil" size={16}/></button></td>}
@@ -814,7 +848,7 @@
             const [view, setView] = useState('login'); // login, register, forgot, about
             
             // Kayıt Formu State'leri
-            const [regData, setRegData] = useState({ company_name: '', tax_no: '', full_name: '', email: '', password: '' });
+            const [regData, setRegData] = useState({ company_name: '', tax_no: '', full_name: '', email: '', password: '', first_name: '', last_name: '', phone: '', tax_office: '' });
 
             const handleLogin = async (e) => {
                 e.preventDefault(); setLoading(true); setError('');
@@ -826,15 +860,30 @@
             const handleRegister = async (e) => {
                 e.preventDefault(); setLoading(true); setError('');
                 
+                // Shift Key Logic
+                const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                const forceTest = e && e.shiftKey;
+                const targetUrl = forceTest ? N8N_REGISTER_WEBHOOK : (isLocalhost ? N8N_REGISTER_WEBHOOK : N8N_REGISTER_WEBHOOK); // Currently only one webhook defined, but logic ready for split
+
+                const payload = {
+                    "telegram_id": "",
+                    "Adınız": regData.first_name,
+                    "Soyadınız": regData.last_name,
+                    "Mail Adresiniz": regData.email,
+                    "Telefon Numaranız": regData.phone,
+                    "Şirketiniz": regData.company_name,
+                    "Vergi Dairesi": regData.tax_office,
+                    "Vergi Numarası": regData.tax_no,
+                    "password": regData.password 
+                };
+
                 // 1. Supabase'e Kullanıcı Oluşturma İsteği (Webhook ile)
-                // İstemci tarafında signUp yaparsak şirket oluşturma ve bağlama işlemleri karmaşıklaşır.
-                // Bu yüzden tüm kayıt sürecini n8n'e yıkıyoruz.
                 try {
-                    await fetch(N8N_REGISTER_WEBHOOK, {
+                    await fetch(targetUrl, {
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(regData)
+                        body: JSON.stringify(payload)
                     });
                     
                     setInfo("✅ Kayıt talebiniz alındı! Yönetici onayından sonra giriş yapabileceksiniz.");
@@ -847,14 +896,43 @@
 
             const handleReset = async (e) => {
                 e.preventDefault(); setLoading(true); setError(''); setInfo('');
-                const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-                const forceTest = e && e.shiftKey;
-                const url = forceTest ? N8N_RESET_PW_WEBHOOK_TEST : (isLocal ? N8N_RESET_PW_WEBHOOK_TEST : N8N_RESET_PW_WEBHOOK_PROD);
                 
+                // --- ŞİFRE SIFIRLAMA WEBHOOK MANTIĞI ---
+                // Varsayılan: Localhost ise Test, Sunucu ise Prod
+                const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                
+                // SHIFT TUŞU KONTROLÜ
+                const forceTest = e && e.shiftKey;
+                
+                let targetUrl;
+                if (forceTest) {
+                    targetUrl = N8N_RESET_PW_WEBHOOK_TEST;
+                    console.log("🛠️ Shift tuşuna basıldı: TEST Webhook zorlandı (Şifre Sıfırlama).");
+                } else {
+                    targetUrl = isLocalhost ? N8N_RESET_PW_WEBHOOK_TEST : N8N_RESET_PW_WEBHOOK_PROD;
+                }
+
+                // Konsola detaylı bilgi yaz
+                console.log(`🚀 Şifre Sıfırlama Hedef: ${forceTest || isLocalhost ? 'TEST' : 'CANLI'}`);
+                console.log("🔗 URL:", targetUrl);
+
                 try {
-                    await fetch(url, { method: 'POST', mode: 'no-cors', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, source: 'FisMatik_Login_Reset' }) });
-                    setInfo(`✅ Talep gönderildi.${forceTest?'(T)':''}`);
-                } catch (e) { setError("Hata."); }
+                    await fetch(targetUrl, { 
+                        method: 'POST', 
+                        mode: 'no-cors', 
+                        headers: {'Content-Type':'application/json'}, 
+                        body: JSON.stringify({ 
+                            email: email,
+                            source: 'FisMatik_Login_Reset'
+                        }) 
+                    });
+                    
+                    const envMsg = forceTest ? "(TEST ORTAMI)" : "";
+                    setInfo(`✅ E-posta adresiniz sistemde kayıtlıysa, şifre sıfırlama talimatları gönderilmiştir. ${envMsg}`); 
+                } catch (e) { 
+                    console.error(e);
+                    setError("Bağlantı hatası. Lütfen tekrar deneyin."); 
+                }
                 setLoading(false);
             };
 
@@ -888,11 +966,20 @@
                                 <div className="flex justify-center mb-4 text-purple-600"><Icon name="user-plus" size={48} /></div>
                                 <h2 className="text-xl font-bold text-center mb-4">Yeni Hesap Oluştur</h2>
                                 <form onSubmit={handleRegister} className="space-y-3">
-                                    <input type="text" placeholder="Şirket Adı" className="w-full p-3 border rounded-lg text-sm" value={regData.company_name} onChange={e=>setRegData({...regData, company_name:e.target.value})} required />
-                                    <input type="text" placeholder="Vergi No / T.C." className="w-full p-3 border rounded-lg text-sm" value={regData.tax_no} onChange={e=>setRegData({...regData, tax_no:e.target.value})} required />
-                                    <input type="text" placeholder="Ad Soyad (Yetkili)" className="w-full p-3 border rounded-lg text-sm" value={regData.full_name} onChange={e=>setRegData({...regData, full_name:e.target.value})} required />
+                                    <div className="flex gap-2">
+                                        <input type="text" placeholder="Adınız" className="w-1/2 p-3 border rounded-lg text-sm" value={regData.first_name} onChange={e=>setRegData({...regData, first_name:e.target.value})} required />
+                                        <input type="text" placeholder="Soyadınız" className="w-1/2 p-3 border rounded-lg text-sm" value={regData.last_name} onChange={e=>setRegData({...regData, last_name:e.target.value})} required />
+                                    </div>
                                     <input type="email" placeholder="E-Posta" className="w-full p-3 border rounded-lg text-sm" value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})} required />
-                                    <input type="password" placeholder="Şifre" className="w-full p-3 border rounded-lg text-sm" value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})} required />
+                                    <input type="text" placeholder="Telefon (5XX...)" className="w-full p-3 border rounded-lg text-sm" value={regData.phone} onChange={e=>setRegData({...regData, phone:e.target.value})} required />
+                                    
+                                    <input type="text" placeholder="Şirket Adı" className="w-full p-3 border rounded-lg text-sm mt-4" value={regData.company_name} onChange={e=>setRegData({...regData, company_name:e.target.value})} required />
+                                    <div className="flex gap-2">
+                                        <input type="text" placeholder="Vergi Dairesi" className="w-1/2 p-3 border rounded-lg text-sm" value={regData.tax_office} onChange={e=>setRegData({...regData, tax_office:e.target.value})} required />
+                                        <input type="text" placeholder="Vergi No / T.C." className="w-1/2 p-3 border rounded-lg text-sm" value={regData.tax_no} onChange={e=>setRegData({...regData, tax_no:e.target.value})} required />
+                                    </div>
+                                    
+                                    <input type="password" placeholder="Şifre Belirleyin" className="w-full p-3 border rounded-lg text-sm mt-2" value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})} required />
                                     
                                     {error && <p className="text-red-500 text-xs">{error}</p>}
                                     <button disabled={loading} className="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition">{loading ? <Icon name="loader-2" className="loading-spin"/> : 'Kayıt Ol ve Onaya Gönder'}</button>
@@ -1137,4 +1224,3 @@
     </script>
 </body>
 </html>
-```
