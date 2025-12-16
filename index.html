@@ -62,13 +62,17 @@
         const DEFAULT_SB_URL = "https://hequoxateionmtfjzkxl.supabase.co";
         const DEFAULT_SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlcXVveGF0ZWlvbm10Zmp6a3hsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTg5MDAsImV4cCI6MjA4MDgzNDkwMH0.aIiIdWw2l7Kcqa4BavNJQ8ARZrdPnmxD8qSMpTlXYhA";
         
-        // 1. Rapor Webhook URLleri
+        // 1. Rapor Webhook URLleri (Test ve Canlı Ayrımı Var)
         const N8N_REPORT_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/fbdbb58e-91f5-4137-891a-339eeb821168";
         const N8N_REPORT_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/fbdbb58e-91f5-4137-891a-339eeb821168";
 
-        // 2. Şifre Sıfırlama Webhook URLleri
+        // 2. Şifre Sıfırlama Webhook URLleri (Test ve Canlı)
         const N8N_RESET_PW_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
         const N8N_RESET_PW_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
+        
+        // YENİ: Kayıt Ol ve Alt Kullanıcı Ekleme Webhookları (Bunları n8n'de oluşturacağız)
+        const N8N_REGISTER_WEBHOOK = "https://n8n.ittyazilim.com/webhook-test/kayit-olustur"; 
+        const N8N_ADD_USER_WEBHOOK = "https://n8n.ittyazilim.com/webhook-test/alt-kullanici-ekle";
 
         // Global Supabase Client
         const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
@@ -89,7 +93,7 @@
             return data.candidates?.[0]?.content?.parts?.[0]?.text || "Yanıt alınamadı.";
         };
 
-        // --- ALT BİLEŞENLER ---
+        // --- BİLEŞENLER ---
 
         const StatCard = ({ title, value, icon, color, bg }) => (
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -98,7 +102,148 @@
             </div>
         );
 
-        // --- YENİ: Hakkımızda İçerik Bileşeni (Tekrar kullanılabilir) ---
+        // --- YENİ: Ekip Yönetimi Bileşeni ---
+        const TeamManagement = ({ user, profile }) => {
+            const [users, setUsers] = useState([]);
+            const [company, setCompany] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [showAddModal, setShowAddModal] = useState(false);
+            const [newUser, setNewUser] = useState({ email: '', full_name: '', password: '', role: 'user' });
+            const [adding, setAdding] = useState(false);
+
+            const fetchTeam = useCallback(async () => {
+                if(!profile?.company_id) return;
+                setLoading(true);
+                
+                // Şirket Bilgisi ve Limitleri Çek
+                const { data: comp } = await sb.from('companies').select('*').eq('id', profile.company_id).single();
+                setCompany(comp);
+
+                // Kullanıcıları Çek
+                const { data: team } = await sb.from('users').select('*').eq('company_id', profile.company_id);
+                setUsers(team || []);
+                
+                setLoading(false);
+            }, [profile?.company_id]);
+
+            useEffect(() => { fetchTeam(); }, [fetchTeam]);
+
+            const handleAddUser = async () => {
+                if (!company) return;
+                if (users.length >= (company.max_users || 5)) {
+                    alert(`Şirket kullanıcı limitinize (${company.max_users || 5}) ulaştınız.`);
+                    return;
+                }
+                
+                setAdding(true);
+                try {
+                    // Client tarafında başka bir kullanıcı oluşturmak oturumu kapatacağı için
+                    // bu işlemi n8n webhook üzerinden (Service Role kullanarak) yapıyoruz.
+                    await fetch(N8N_ADD_USER_WEBHOOK, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            company_id: profile.company_id,
+                            email: newUser.email,
+                            full_name: newUser.full_name,
+                            password: newUser.password,
+                            role: newUser.role,
+                            manager_id: user.id
+                        })
+                    });
+                    
+                    alert("Kullanıcı oluşturma isteği gönderildi. Birkaç saniye içinde listede görünecektir.");
+                    setShowAddModal(false);
+                    setNewUser({ email: '', full_name: '', password: '', role: 'user' });
+                    // Kısa bir bekleme sonrası listeyi yenile
+                    setTimeout(fetchTeam, 2000);
+
+                } catch (error) {
+                    alert("Hata: " + error.message);
+                } finally {
+                    setAdding(false);
+                }
+            };
+
+            if (loading) return <div className="text-center p-10 text-slate-400">Yükleniyor...</div>;
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800">Ekip Yönetimi</h2>
+                            <p className="text-slate-500 text-sm">
+                                {company?.name} (Kullanıcılar: {users.length} / {company?.max_users || 5})
+                            </p>
+                        </div>
+                        <button 
+                            onClick={() => setShowAddModal(true)}
+                            className="bg-primary text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition"
+                        >
+                            <Icon name="user-plus" size={18} /> Yeni Kullanıcı
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-slate-50 text-slate-500 uppercase text-xs">
+                                <tr>
+                                    <th className="px-6 py-3">Ad Soyad</th>
+                                    <th className="px-6 py-3">E-Posta</th>
+                                    <th className="px-6 py-3">Rol</th>
+                                    <th className="px-6 py-3">Durum</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {users.map(u => (
+                                    <tr key={u.id} className="hover:bg-slate-50">
+                                        <td className="px-6 py-4 font-medium text-slate-800">{u.full_name || '-'}</td>
+                                        <td className="px-6 py-4 text-slate-600">{u.email}</td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2 py-1 rounded text-xs ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                {u.role === 'admin' ? 'Yönetici' : 'Personel'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {u.status === 'active' || u.status === 'onaylandi' ? 
+                                                <span className="text-green-600 flex items-center gap-1"><Icon name="check-circle" size={14}/> Aktif</span> : 
+                                                <span className="text-orange-500 flex items-center gap-1"><Icon name="clock" size={14}/> Beklemede</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {showAddModal && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                            <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md animate-in fade-in zoom-in duration-200">
+                                <h3 className="text-lg font-bold mb-4">Yeni Kullanıcı Ekle</h3>
+                                <div className="space-y-3">
+                                    <input type="text" placeholder="Ad Soyad" className="w-full p-2 border rounded" value={newUser.full_name} onChange={e=>setNewUser({...newUser, full_name:e.target.value})} />
+                                    <input type="email" placeholder="E-Posta" className="w-full p-2 border rounded" value={newUser.email} onChange={e=>setNewUser({...newUser, email:e.target.value})} />
+                                    <input type="password" placeholder="Geçici Şifre" className="w-full p-2 border rounded" value={newUser.password} onChange={e=>setNewUser({...newUser, password:e.target.value})} />
+                                    <select className="w-full p-2 border rounded" value={newUser.role} onChange={e=>setNewUser({...newUser, role:e.target.value})}>
+                                        <option value="user">Personel (Sadece Fiş Yükler)</option>
+                                        <option value="admin">Yönetici (Tam Yetki)</option>
+                                    </select>
+                                </div>
+                                <div className="mt-6 flex justify-end gap-2">
+                                    <button onClick={()=>setShowAddModal(false)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded">İptal</button>
+                                    <button onClick={handleAddUser} disabled={adding} className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-700 flex items-center gap-2">
+                                        {adding ? <Icon name="loader-2" className="loading-spin" size={16}/> : <Icon name="user-plus" size={16}/>} Ekle
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // --- GÜNCELLENEN: Hakkımızda İçerik Bileşeni ---
         const AboutContent = () => (
             <div className="space-y-8 text-left">
                 <div className="flex items-start gap-4">
@@ -119,12 +264,25 @@
                     </div>
                     <div>
                         <h3 className="text-lg font-bold text-slate-800 mb-2">Nasıl Kullanılır?</h3>
-                        <ol className="list-decimal list-inside text-slate-600 space-y-2">
+                        <ul className="list-disc list-inside text-slate-600 space-y-2">
                             <li>Telegram botumuza fiş fotoğrafını gönderin.</li>
                             <li>Yapay zeka fişinizi okur ve sisteme kaydeder.</li>
                             <li>Bu panel üzerinden harcamalarınızı görüntüleyin ve düzenleyin.</li>
                             <li>Tek tıkla Excel raporunuzu e-posta adresinize alın.</li>
-                        </ol>
+                        </ul>
+                    </div>
+                </div>
+                
+                 {/* YAPAY ZEKA ANALİZİ */}
+                <div className="flex items-start gap-4">
+                    <div className="p-3 bg-indigo-100 rounded-lg text-indigo-600 mt-1">
+                        <Icon name="sparkles" size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-800 mb-2">Yapay Zeka Analizi</h3>
+                        <p className="text-slate-600 leading-relaxed">
+                            Google Gemini ile harcamalarınızı analiz edin, tasarruf önerileri alın. Ayarlar sayfasında "Google Gemini API Anahtarı" bölümüne Gemini API anahtarınızı girerek bu özelliği aktif edebilirsiniz. sistemdeki fiş kayıtlarınız arttıkça tutarlı sonuçlar verme olasılığı artacaktır.
+                        </p>
                     </div>
                 </div>
 
@@ -138,7 +296,7 @@
                             <p className="text-slate-600 mb-3">
                                 FişMatik şu an davetiye ve başvuru usulü ile çalışmaktadır. Sisteme kayıt olmak ve şirketiniz için aktivasyon sağlamak için lütfen Telegram botumuz üzerinden başvuru yapınız.
                             </p>
-                            <a href="https://t.me/ITTFisMatikBot" target="_blank" className="inline-flex items-center gap-2 text-primary font-medium hover:underline">
+                            <a href="https://t.me/ITT_Fis_matik_BOT" target="_blank" className="inline-flex items-center gap-2 text-primary font-medium hover:underline">
                                 <Icon name="send" size={16} /> FişMatik Telegram Botuna Git
                             </a>
                         </div>
@@ -178,7 +336,7 @@
             </div>
         );
 
-        const ReceiptsTable = ({ receipts, loading, simple, supabase, refresh, onLocalUpdate }) => {
+        const ReceiptsTable = ({ receipts, loading, simple, supabase, refresh, onLocalUpdate, userRole }) => {
             const [editItem, setEditItem] = useState(null);
             const [isSaving, setIsSaving] = useState(false);
             const [filters, setFilters] = useState({ tarih: '', isletme_adi: '', toplam_tutar: '', durum: '', kategori: '' });
@@ -252,11 +410,27 @@
             const filtered = useMemo(() => {
                 if (simple) return receipts;
                 return receipts.filter(r => {
-                    return (!filters.tarih || r.tarih?.includes(filters.tarih)) &&
-                           (!filters.isletme_adi || r.isletme_adi?.toLowerCase().includes(filters.isletme_adi.toLowerCase())) &&
-                           (!filters.toplam_tutar || r.toplam_tutar?.toString().includes(filters.toplam_tutar)) &&
-                           (!filters.durum || r.durum?.toLowerCase().includes(filters.durum.toLowerCase())) &&
-                           (!filters.kategori || r.kategori?.toLowerCase().includes(filters.kategori.toLowerCase()));
+                    const matchTarih = !filters.tarih || r.tarih?.includes(filters.tarih);
+                    const matchIsletme = !filters.isletme_adi || r.isletme_adi?.toLowerCase().includes(filters.isletme_adi.toLowerCase());
+                    const matchTutar = !filters.toplam_tutar || r.toplam_tutar?.toString().includes(filters.toplam_tutar);
+                    const matchKategori = !filters.kategori || r.kategori?.toLowerCase().includes(filters.kategori.toLowerCase());
+                    
+                    // Durum Filtresi (Güncellenmiş)
+                    let matchDurum = true;
+                    if (filters.durum) {
+                        const s = r.durum?.toLowerCase() || '';
+                        const f = filters.durum.toLowerCase();
+                        
+                        if (f === 'onaylandi') {
+                            matchDurum = s === 'onaylandi' || s === 'onaylandı';
+                        } else if (f === 'mukerrer') {
+                            matchDurum = s === 'mukerrer' || s === 'mükerrer';
+                        } else {
+                            matchDurum = s.includes(f);
+                        }
+                    }
+
+                    return matchTarih && matchIsletme && matchTutar && matchDurum && matchKategori;
                 });
             }, [receipts, filters, simple]);
 
@@ -637,7 +811,10 @@
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState('');
             const [info, setInfo] = useState('');
-            const [view, setView] = useState('login');
+            const [view, setView] = useState('login'); // login, register, forgot, about
+            
+            // Kayıt Formu State'leri
+            const [regData, setRegData] = useState({ company_name: '', tax_no: '', full_name: '', email: '', password: '' });
 
             const handleLogin = async (e) => {
                 e.preventDefault(); setLoading(true); setError('');
@@ -646,91 +823,100 @@
                 setLoading(false);
             };
 
-            const handleReset = async (e) => {
-                e.preventDefault(); setLoading(true); setError(''); setInfo('');
+            const handleRegister = async (e) => {
+                e.preventDefault(); setLoading(true); setError('');
                 
-                // --- ŞİFRE SIFIRLAMA WEBHOOK MANTIĞI ---
-                // Varsayılan: Localhost ise Test, Sunucu ise Prod
-                const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-                
-                // SHIFT TUŞU KONTROLÜ: Eğer butona Shift ile basıldıysa ZORLA TEST URL'sini kullan
-                // Not: e.nativeEvent kontrolü gerekebilir mi? React synthetic event'i shiftKey'i taşır.
-                const forceTest = e && e.shiftKey;
-                
-                let targetUrl;
-                if (forceTest) {
-                    targetUrl = N8N_RESET_PW_WEBHOOK_TEST;
-                    console.log("🛠️ Shift tuşuna basıldı: TEST Webhook zorlandı (Şifre Sıfırlama).");
-                } else {
-                    targetUrl = isLocalhost ? N8N_RESET_PW_WEBHOOK_TEST : N8N_RESET_PW_WEBHOOK_PROD;
-                }
-
-                // Konsola detaylı bilgi yaz
-                console.log(`🚀 Şifre Sıfırlama Hedef: ${forceTest || isLocalhost ? 'TEST' : 'CANLI'}`);
-                console.log("🔗 URL:", targetUrl);
-
+                // 1. Supabase'e Kullanıcı Oluşturma İsteği (Webhook ile)
+                // İstemci tarafında signUp yaparsak şirket oluşturma ve bağlama işlemleri karmaşıklaşır.
+                // Bu yüzden tüm kayıt sürecini n8n'e yıkıyoruz.
                 try {
-                    await fetch(targetUrl, { 
-                        method: 'POST', 
-                        mode: 'no-cors', 
-                        headers: {'Content-Type':'application/json'}, 
-                        body: JSON.stringify({ 
-                            email: email,
-                            source: 'FisMatik_Login_Reset'
-                        }) 
+                    await fetch(N8N_REGISTER_WEBHOOK, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(regData)
                     });
                     
-                    const envMsg = forceTest ? "(TEST ORTAMI)" : "";
-                    setInfo(`✅ E-posta adresiniz sistemde kayıtlıysa, şifre sıfırlama talimatları gönderilmiştir. ${envMsg}`); 
-                } catch (e) { 
-                    console.error(e);
-                    setError("Bağlantı hatası. Lütfen tekrar deneyin."); 
+                    setInfo("✅ Kayıt talebiniz alındı! Yönetici onayından sonra giriş yapabileceksiniz.");
+                    setView('login'); // Giriş ekranına dön
+                } catch (e) {
+                    setError("Kayıt hatası: " + e.message);
                 }
+                setLoading(false);
+            };
+
+            const handleReset = async (e) => {
+                e.preventDefault(); setLoading(true); setError(''); setInfo('');
+                const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                const forceTest = e && e.shiftKey;
+                const url = forceTest ? N8N_RESET_PW_WEBHOOK_TEST : (isLocal ? N8N_RESET_PW_WEBHOOK_TEST : N8N_RESET_PW_WEBHOOK_PROD);
+                
+                try {
+                    await fetch(url, { method: 'POST', mode: 'no-cors', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, source: 'FisMatik_Login_Reset' }) });
+                    setInfo(`✅ Talep gönderildi.${forceTest?'(T)':''}`);
+                } catch (e) { setError("Hata."); }
                 setLoading(false);
             };
 
             return (
                 <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
                     <div className="glass-panel p-8 rounded-2xl shadow-xl w-full max-w-sm animate-in fade-in zoom-in duration-300">
-                        {view === 'login' ? (
+                        {view === 'login' && (
                             <>
                                 <div className="flex justify-center mb-4 text-primary"><Icon name="receipt" size={48} /></div>
                                 <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">FişMatik</h1>
                                 <p className="text-center text-slate-500 text-sm mb-6">Akıllı Müşteri Paneline Giriş</p>
-                                
                                 <form onSubmit={handleLogin} className="space-y-4">
-                                    <input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-primary transition" required />
-                                    <input type="password" placeholder="Şifre" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-primary transition" required />
+                                    <input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg" required />
+                                    <input type="password" placeholder="Şifre" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-3 border rounded-lg" required />
+                                    {info && <div className="p-3 bg-green-50 text-green-700 text-xs rounded border border-green-100">{info}</div>}
                                     {error && <p className="text-red-500 text-xs">{error}</p>}
-                                    <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center items-center gap-2">{loading ? <Icon name="loader-2" className="loading-spin" size={18}/> : 'Giriş Yap'}</button>
-                                    <div className="flex justify-between items-center mt-4">
-                                        <button type="button" onClick={()=>setView('forgot')} className="text-xs text-slate-500 hover:text-primary transition">Şifremi Unuttum</button>
-                                        <button type="button" onClick={()=>setView('about')} className="text-xs text-primary font-medium hover:underline">Nedir? / Kayıt Ol</button>
+                                    <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg">{loading ? <Icon name="loader-2" className="loading-spin"/> : 'Giriş Yap'}</button>
+                                    <div className="flex flex-col gap-2 mt-4 text-center">
+                                        <button type="button" onClick={()=>setView('forgot')} className="text-xs text-slate-500 hover:text-primary">Şifremi Unuttum</button>
+                                        <div className="flex justify-between mt-2">
+                                            <button type="button" onClick={()=>setView('register')} className="text-sm text-primary font-bold hover:underline">Kayıt Ol</button>
+                                            <button type="button" onClick={()=>setView('about')} className="text-sm text-slate-600 hover:underline">FişMatik Nedir?</button>
+                                        </div>
                                     </div>
                                 </form>
                             </>
-                        ) : view === 'forgot' ? (
+                        )}
+                        
+                        {view === 'register' && (
+                            <>
+                                <div className="flex justify-center mb-4 text-purple-600"><Icon name="user-plus" size={48} /></div>
+                                <h2 className="text-xl font-bold text-center mb-4">Yeni Hesap Oluştur</h2>
+                                <form onSubmit={handleRegister} className="space-y-3">
+                                    <input type="text" placeholder="Şirket Adı" className="w-full p-3 border rounded-lg text-sm" value={regData.company_name} onChange={e=>setRegData({...regData, company_name:e.target.value})} required />
+                                    <input type="text" placeholder="Vergi No / T.C." className="w-full p-3 border rounded-lg text-sm" value={regData.tax_no} onChange={e=>setRegData({...regData, tax_no:e.target.value})} required />
+                                    <input type="text" placeholder="Ad Soyad (Yetkili)" className="w-full p-3 border rounded-lg text-sm" value={regData.full_name} onChange={e=>setRegData({...regData, full_name:e.target.value})} required />
+                                    <input type="email" placeholder="E-Posta" className="w-full p-3 border rounded-lg text-sm" value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})} required />
+                                    <input type="password" placeholder="Şifre" className="w-full p-3 border rounded-lg text-sm" value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})} required />
+                                    
+                                    {error && <p className="text-red-500 text-xs">{error}</p>}
+                                    <button disabled={loading} className="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition">{loading ? <Icon name="loader-2" className="loading-spin"/> : 'Kayıt Ol ve Onaya Gönder'}</button>
+                                    <button type="button" onClick={()=>setView('login')} className="w-full text-slate-500 text-sm mt-2">Girişe Dön</button>
+                                </form>
+                            </>
+                        )}
+
+                        {view === 'forgot' && (
                             <form onSubmit={handleReset} className="space-y-4">
-                                <div className="flex justify-center mb-4 text-primary"><Icon name="key-round" size={48} /></div>
-                                <h3 className="text-xl font-bold text-center text-slate-800 mb-2">Şifre Sıfırlama</h3>
-                                <p className="text-center text-slate-500 text-sm mb-4">E-posta adresinize sıfırlama talimatlarını göndereceğiz.</p>
-                                
-                                <input type="email" placeholder="E-Posta Adresiniz" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-primary transition" required />
-                                {info && <div className="p-3 bg-green-50 text-green-700 text-xs rounded border border-green-100">{info}</div>}
-                                {error && <p className="text-red-500 text-xs">{error}</p>}
-                                <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center items-center gap-2">{loading ? <Icon name="loader-2" className="loading-spin" size={18}/> : 'Link Gönder'}</button>
-                                <div className="text-center mt-2"><button type="button" onClick={()=>setView('login')} className="text-xs text-slate-500 hover:text-slate-800 transition">Giriş Ekranına Dön</button></div>
+                                <h3 className="text-center font-bold">Şifre Sıfırlama</h3>
+                                <input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg" required />
+                                <button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg">Link Gönder</button>
+                                <button type="button" onClick={()=>setView('login')} className="w-full text-slate-500 text-sm">İptal</button>
                             </form>
-                        ) : (
-                            // Hakkımızda View (Login ekranı içinden erişilen)
+                        )}
+                        
+                        {view === 'about' && (
                             <div className="text-left">
                                 <div className="flex items-center gap-2 mb-4 text-primary">
                                     <button onClick={()=>setView('login')} className="p-1 hover:bg-blue-50 rounded-full"><Icon name="arrow-left" size={20} /></button>
                                     <span className="font-bold text-lg">Hakkımızda</span>
                                 </div>
-                                <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-6 custom-scrollbar">
-                                    <AboutContent />
-                                </div>
+                                <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-6 custom-scrollbar"><AboutContent /></div>
                             </div>
                         )}
                     </div>
@@ -749,28 +935,45 @@
 
             // Veri Çekme - Hata Yönetimi ve Profil/Kullanıcı Kontrolü
             const fetchData = useCallback(async () => {
-                if(!user?.id) return;
+                if(!user?.id) {
+                    console.log("Kullanıcı ID yok, veri çekilmiyor");
+                    setLoading(false);
+                    return;
+                }
                 
                 setLoading(true);
                 try {
+                    console.log("Veri çekiliyor...", { userId: user.id, companyId: profile?.company_id });
                     let q = sb.from('fisler').select('*').order('tarih', { ascending: false });
                     
                     if (profile?.company_id) {
                         q = q.eq('company_id', profile.company_id);
+                        console.log("Şirket bazlı sorgu:", profile.company_id);
                     } else {
                         q = q.eq('user_id', user.id);
+                        console.log("Kullanıcı bazlı sorgu:", user.id);
                     }
 
                     const { data, error } = await q;
 
-                    if (!error) {
+                    if (error) {
+                        console.error("Veri çekme hatası:", error);
+                        setReceipts([]);
+                        setStats({ total: 0, count: 0, pending: 0 });
+                    } else {
+                        console.log("Gelen Fişler:", data?.length || 0, "adet");
                         setReceipts(data || []);
                         const total = (data||[]).reduce((a,b)=>a+(b.toplam_tutar||0),0);
                         const pending = (data||[]).filter(r=>r.durum==='beklemede').length;
-                        setStats({ total, count: data.length, pending });
+                        setStats({ total, count: (data||[]).length, pending });
                     }
-                } catch(e) { console.error(e); }
-                setLoading(false);
+                } catch(e) { 
+                    console.error("Beklenmeyen hata:", e);
+                    setReceipts([]);
+                    setStats({ total: 0, count: 0, pending: 0 });
+                } finally {
+                    setLoading(false);
+                }
             }, [user?.id, profile?.company_id]);
 
             // Yerel (Optimistic) Güncelleme
@@ -797,25 +1000,20 @@
             return (
                 <div className="min-h-screen flex flex-col md:flex-row">
                     <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col z-20">
-                        <div className="p-6 flex items-center gap-2 border-b border-slate-100">
-                            <Icon name="receipt" className="text-primary" />
-                            <span className="font-bold text-lg text-slate-800">FişMatik</span>
-                        </div>
+                        <div className="p-6 flex items-center gap-2 border-b border-slate-100"><Icon name="receipt" className="text-primary" /><span className="font-bold text-lg text-slate-800">FişMatik</span></div>
                         <nav className="flex-1 p-4 space-y-1">
-                            {['dashboard','receipts','reports','settings', 'about'].map(v => (
-                                <button key={v} onClick={()=>setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view===v?'bg-blue-50 text-primary':'text-slate-600 hover:bg-slate-50'}`}>
-                                    <Icon name={v==='dashboard'?'layout-dashboard':v==='receipts'?'file-text':v==='reports'?'bar-chart-3':v==='settings'?'settings':'info'} size={18}/> 
-                                    {v==='dashboard'?'Genel Bakış':v==='receipts'?'Fişlerim':v==='reports'?'Raporlar':v==='settings'?'Ayarlar':'Hakkında'}
-                                </button>
-                            ))}
+                            {['dashboard','receipts','reports','team','settings','about'].map(v => {
+                                // Ekip yönetimi sadece admin için
+                                if (v === 'team' && profile?.role !== 'admin') return null;
+                                return (
+                                    <button key={v} onClick={()=>setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view===v?'bg-blue-50 text-primary':'text-slate-600 hover:bg-slate-50'}`}>
+                                        <Icon name={v==='dashboard'?'layout-dashboard':v==='receipts'?'file-text':v==='reports'?'bar-chart-3':v==='team'?'users':v==='settings'?'settings':'info'} size={18}/> 
+                                        {v==='dashboard'?'Genel Bakış':v==='receipts'?'Fişlerim':v==='reports'?'Raporlar':v==='team'?'Ekip Yönetimi':v==='settings'?'Ayarlar':'Hakkında'}
+                                    </button>
+                                )
+                            })}
                         </nav>
-                        <div className="p-4 border-t">
-                            <div className="mb-4 text-xs text-slate-500">
-                                <p className="font-bold text-slate-800 truncate">{profile?.full_name || user.email}</p>
-                                <p>Şirket ID: {profile?.company_id || '-'}</p>
-                            </div>
-                            <button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16}/> Çıkış</button>
-                        </div>
+                        <div className="p-4 border-t"><div className="mb-4 text-xs text-slate-500"><p className="font-bold text-slate-800 truncate">{profile?.full_name || user.email}</p><p>Rol: {profile?.role || 'User'}</p></div><button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16}/> Çıkış</button></div>
                     </aside>
                     <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen bg-slate-50">
                         {view==='dashboard' && (
@@ -827,30 +1025,14 @@
                                     <StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50"/>
                                     <StatCard title="Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50"/>
                                 </div>
-                                <div className="bg-white p-6 rounded border shadow-sm">
-                                    <h3 className="font-bold mb-4">Son Hareketler</h3>
-                                    <ReceiptsTable receipts={receipts.slice(0,5)} loading={loading} simple={true} />
-                                </div>
+                                <div className="bg-white p-6 rounded border shadow-sm"><h3 className="font-bold mb-4">Son Hareketler</h3><ReceiptsTable receipts={receipts.slice(0,5)} loading={loading} simple={true} /></div>
                             </div>
                         )}
-                        {view==='receipts' && (
-                            <div className="bg-white rounded border shadow-sm p-4 h-full flex flex-col">
-                                <div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Fiş Kayıtları</h2><button onClick={fetchData}><Icon name="refresh-ccw"/></button></div>
-                                <ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData} onLocalUpdate={handleLocalUpdate} />
-                            </div>
-                        )}
+                        {view==='receipts' && <div className="bg-white rounded border shadow-sm p-4 h-full flex flex-col"><div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Fiş Kayıtları</h2><button onClick={fetchData}><Icon name="refresh-ccw"/></button></div><ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData} onLocalUpdate={handleLocalUpdate} userRole={profile?.role} /></div>}
                         {view==='reports' && <div className="max-w-xl mx-auto mt-10"><ReportCard user={user} profile={profile}/></div>}
+                        {view==='team' && <div className="max-w-4xl mx-auto mt-5"><TeamManagement user={user} profile={profile} /></div>}
                         {view==='settings' && <Settings />}
-                        {view==='about' && (
-                            <div className="max-w-3xl mx-auto bg-white p-8 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in duration-300">
-                                <div className="text-center mb-8 border-b border-slate-100 pb-6">
-                                    <div className="inline-block p-4 bg-blue-50 rounded-full text-primary mb-4"><Icon name="info" size={32} /></div>
-                                    <h2 className="text-2xl font-bold text-slate-800">Hakkımızda</h2>
-                                    <p className="text-slate-500">FişMatik Platformu Hakkında Bilgiler</p>
-                                </div>
-                                <AboutContent />
-                            </div>
-                        )}
+                        {view==='about' && <div className="max-w-3xl mx-auto bg-white p-8 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in duration-300"><div className="text-center mb-8 border-b border-slate-100 pb-6"><h2 className="text-2xl font-bold text-slate-800">Hakkımızda</h2></div><AboutContent /></div>}
                     </main>
                 </div>
             );
@@ -860,31 +1042,59 @@
         const App = () => {
             const [user, setUser] = useState(null);
             const [profile, setProfile] = useState(null);
+            const [pendingApproval, setPendingApproval] = useState(false);
 
-            const fetchProfile = async (u) => {
+            const fetchProfile = useCallback(async (u) => {
+                if(!u?.id) return;
+                
                 try {
+                    console.log("Profil Yükleniyor...", u.id);
                     let { data, error } = await sb.from('users').select('*').eq('id', u.id).limit(1);
-                    if(error || !data || data.length === 0) { 
-                        const res = await sb.from('users').select('*').eq('email', u.email).limit(1); 
-                        if(res.data && res.data.length > 0) data = res.data;
+                    
+                    if(error || !data || data.length === 0) {
+                        // ID ile bulunamazsa email ile dene
+                        console.log("Profil ID ile bulunamadı, email ile deneniyor...", u.email);
+                        const res = await sb.from('users').select('*').eq('email', u.email).limit(1);
+                        if(res.data && res.data.length > 0) {
+                            data = res.data;
+                            error = res.error;
+                        }
                     }
-                    if(data && data.length > 0) setProfile(data[0]);
-                } catch(e) {
-                    console.error("Profil yükleme hatası:", e);
+
+                    if(data && data.length > 0) {
+                        const userProfile = data[0];
+                        console.log("Profil Bulundu:", userProfile);
+                        
+                        // ONAY KONTROLÜ
+                        if (userProfile.status === 'pending' || userProfile.status === 'beklemede') {
+                            setPendingApproval(true);
+                            setProfile(userProfile); 
+                        } else {
+                            setPendingApproval(false);
+                            setProfile(userProfile);
+                        }
+                    } else {
+                        console.warn("Profil bulunamadı (public.users tablosunda kayıt yok)");
+                        setProfile(null);
+                    }
+                } catch(e) { 
+                    console.error("Profil Fetch Exception:", e);
+                    setProfile(null);
                 }
-            };
+            }, []);
 
             useEffect(() => {
                 let mounted = true;
-                let authSubscription = null;
                 
-                sb.auth.getUser().then(({data})=>{ 
-                    if(mounted && data?.user) { 
-                        setUser(data.user); 
-                        fetchProfile(data.user); 
-                    } 
+                // İlk yüklemede mevcut oturumu kontrol et
+                sb.auth.getUser().then(({data}) => {
+                    if(mounted && data?.user) {
+                        setUser(data.user);
+                        fetchProfile(data.user);
+                    }
                 });
                 
+                // Oturum değişikliklerini dinle
                 const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => { 
                     if(!mounted) return;
                     if(session?.user) { 
@@ -893,17 +1103,32 @@
                     } else { 
                         setUser(null); 
                         setProfile(null); 
+                        setPendingApproval(false); 
                     }
                 });
-                authSubscription = subscription;
                 
-                return () => {
-                    mounted = false;
-                    if(authSubscription) authSubscription.unsubscribe();
+                return () => { 
+                    mounted = false; 
+                    if(subscription) subscription.unsubscribe(); 
                 };
-            }, []);
+            }, [fetchProfile]);
 
             if(!user) return <Login onLogin={()=>{}} />;
+
+            // ONAY BEKLEME EKRANI
+            if (pendingApproval) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+                        <div className="bg-white p-8 rounded-xl shadow-xl max-w-md text-center border-t-4 border-yellow-400">
+                            <div className="inline-block p-4 bg-yellow-50 rounded-full text-yellow-600 mb-4"><Icon name="clock" size={40} /></div>
+                            <h2 className="text-2xl font-bold text-slate-800 mb-2">Onay Bekleniyor</h2>
+                            <p className="text-slate-600 mb-6">Hesabınız oluşturuldu ancak yönetici onayı bekleniyor. Onaylandığında size e-posta ile bilgi verilecektir.</p>
+                            <button onClick={()=>sb.auth.signOut()} className="text-slate-500 hover:text-slate-800 underline">Çıkış Yap</button>
+                        </div>
+                    </div>
+                );
+            }
+
             return <Dashboard user={user} profile={profile} onLogout={()=>sb.auth.signOut()} supabase={sb} />;
         };
 
@@ -912,3 +1137,4 @@
     </script>
 </body>
 </html>
+```
