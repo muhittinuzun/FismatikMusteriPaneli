@@ -62,27 +62,13 @@
         const DEFAULT_SB_URL = "https://hequoxateionmtfjzkxl.supabase.co";
         const DEFAULT_SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlcXVveGF0ZWlvbm10Zmp6a3hsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTg5MDAsImV4cCI6MjA4MDgzNDkwMH0.aIiIdWw2l7Kcqa4BavNJQ8ARZrdPnmxD8qSMpTlXYhA";
         
-        // 1. Rapor Webhook URLleri (Test ve Canlı Ayrımı Var)
         const N8N_REPORT_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/fismatik";
         const N8N_REPORT_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/fismatik";
-
-        // 2. Şifre Sıfırlama Webhook URLleri (Test ve Canlı)
         const N8N_RESET_PW_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
         const N8N_RESET_PW_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
-        
-        // 3. KAYIT OL (Register) Webhook URLleri (YENİ)
-        const N8N_REGISTER_URLS = {
-            TEST: "https://n8n.ittyazilim.com/webhook-test/030dfb1b-49f9-4dc8-82e3-98b884f3065c",
-            PROD: "https://n8n.ittyazilim.com/webhook/030dfb1b-49f9-4dc8-82e3-98b884f3065c"
-        };
-        
-        // 4. Alt Kullanıcı Ekleme Webhook URLleri
-        const N8N_ADD_USER_URLS = {
-            TEST: "https://n8n.ittyazilim.com/webhook-test/alt-kullanici-ekle",
-            PROD: "https://n8n.ittyazilim.com/webhook/alt-kullanici-ekle"
-        };
+        const N8N_REGISTER_URLS = { TEST: "https://n8n.ittyazilim.com/webhook-test/030dfb1b-49f9-4dc8-82e3-98b884f3065c", PROD: "https://n8n.ittyazilim.com/webhook/030dfb1b-49f9-4dc8-82e3-98b884f3065c" };
+        const N8N_ADD_USER_URLS = { TEST: "https://n8n.ittyazilim.com/webhook-test/alt-kullanici-ekle", PROD: "https://n8n.ittyazilim.com/webhook/alt-kullanici-ekle" };
 
-        // Global Supabase Client
         const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
 
         const Icon = ({ name, size = 20, className }) => {
@@ -113,13 +99,43 @@
 
         // --- BİLEŞENLER ---
         
-        // YENİ: Veritabanı Onarım Bileşeni
+        // YENİ: Veritabanı Onarım Bileşeni (GÜÇLENDİRİLDİ)
         const DatabaseFix = () => {
             const sql = `-- BU KODU SUPABASE > SQL EDITOR EKRANINA YAPIŞTIRIN
-CREATE OR REPLACE FUNCTION public.get_current_user_company_id()
-RETURNS bigint LANGUAGE sql SECURITY DEFINER SET search_path = public STABLE
-AS $$ SELECT company_id FROM public.users WHERE id = auth.uid() LIMIT 1; $$;
+-- 1. ID UYUŞMAZLIĞINI DÜZELT (SYNC)
+-- E-posta adresi eşleşen ama ID'si farklı olan kayıtları onarır
+UPDATE public.users
+SET id = au.id
+FROM auth.users au
+WHERE public.users.email = au.email
+AND public.users.id != au.id;
 
+-- 2. GÜVENLİ FONKSİYONU GÜNCELLE (Smart Lookup)
+CREATE OR REPLACE FUNCTION public.get_current_user_company_id()
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  c_id bigint;
+BEGIN
+  -- Önce ID ile dene
+  SELECT company_id INTO c_id FROM public.users WHERE id = auth.uid();
+  
+  -- Bulunamazsa E-posta ile dene (Yedek Plan)
+  IF c_id IS NULL THEN
+    SELECT u.company_id INTO c_id 
+    FROM public.users u
+    JOIN auth.users au ON u.email = au.email
+    WHERE au.id = auth.uid();
+  END IF;
+  
+  RETURN c_id;
+END;
+$$;
+
+-- 3. İZİNLERİ SIFIRLA VE YENİDEN VER
 GRANT USAGE ON SCHEMA public TO authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role;
@@ -127,6 +143,7 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role;
 DROP POLICY IF EXISTS "Kategorileri yönet" ON public.categories;
 DROP POLICY IF EXISTS "Projeleri yönet" ON public.projects;
 DROP POLICY IF EXISTS "Kartları yönet" ON public.company_cards;
+DROP POLICY IF EXISTS "Fişleri yönet" ON public.fisler;
 
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Kategorileri yönet" ON public.categories FOR ALL USING (company_id = get_current_user_company_id());
@@ -135,11 +152,14 @@ ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Projeleri yönet" ON public.projects FOR ALL USING (company_id = get_current_user_company_id());
 
 ALTER TABLE public.company_cards ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Kartları yönet" ON public.company_cards FOR ALL USING (company_id = get_current_user_company_id());`;
+CREATE POLICY "Kartları yönet" ON public.company_cards FOR ALL USING (company_id = get_current_user_company_id());
+
+ALTER TABLE public.fisler ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get_current_user_company_id());`;
 
             const copySql = () => {
                 navigator.clipboard.writeText(sql);
-                alert("SQL Kodu kopyalandı! Supabase paneline gidip SQL Editor'de çalıştırın.");
+                alert("GÜÇLÜ ONARIM KODU KOPYALANDI!\n\nBu kod hem yetkileri düzeltir hem de bozulan kullanıcı ID'lerini eşitler.\n\nLütfen Supabase > SQL Editor'de çalıştırın.");
             };
 
             return (
@@ -149,10 +169,10 @@ CREATE POLICY "Kartları yönet" ON public.company_cards FOR ALL USING (company_
                         <div>
                             <h3 className="font-bold text-amber-800 text-sm">Veritabanı İzin Sorunu Mu Var?</h3>
                             <p className="text-amber-700 text-xs mt-1 mb-3">
-                                Eğer "Kaydetme Hatası" veya "Yetkiniz Yok" uyarısı alıyorsanız, veritabanı izinlerinizi güncellemeniz gerekir.
+                                Eğer "Kaydetme Hatası" veya "Yetkiniz Yok" uyarısı alıyorsanız, veritabanı izinlerini ve kullanıcı eşleşmelerini onarmanız gerekir.
                             </p>
                             <button onClick={copySql} className="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-amber-700 flex items-center gap-1 transition">
-                                <Icon name="database" size={14}/> Onarım Kodunu Kopyala
+                                <Icon name="database" size={14}/> Onarım Kodunu Kopyala (Tam Çözüm)
                             </button>
                         </div>
                     </div>
@@ -220,7 +240,7 @@ CREATE POLICY "Kartları yönet" ON public.company_cards FOR ALL USING (company_
                     if (error) {
                         console.error(`${type} ekleme hatası:`, error);
                         if (error.code === '42501' || error.message.includes('row-level security')) {
-                            alert(`YETKİ HATASI: Veritabanı izniniz eksik. Lütfen yukarıdaki 'Onarım Kodunu Kopyala' butonunu kullanın.`);
+                            alert(`YETKİ HATASI: Kullanıcı ID'niz veritabanıyla uyuşmuyor. Lütfen yukarıdaki 'Onarım Kodunu Kopyala' butonunu kullanın.`);
                         } else {
                             alert("Hata: " + error.message);
                         }
@@ -537,7 +557,7 @@ CREATE POLICY "Kartları yönet" ON public.company_cards FOR ALL USING (company_
                                                 <label className="text-xs text-slate-500">Proje</label>
                                                 <select className="w-full border p-2 rounded bg-white" value={editItem.proje || ''} onChange={e=>setEditItem({...editItem, proje:e.target.value})}>
                                                     <option value="">Seçiniz</option>
-                                                    {metaProjects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                                    {metaProjects.map(p => <option key={p.id} value={p.name}>{p.name} ({p.code})</option>)}
                                                     <option value="Genel">Genel</option>
                                                 </select>
                                             </div>
@@ -772,91 +792,48 @@ CREATE POLICY "Kartları yönet" ON public.company_cards FOR ALL USING (company_
                 if(!u?.id) return;
                 setProfileLoading(true);
                 try {
-                    // Kullanıcı bilgilerini çek (Debug için log kaldırıldı)
+                    console.log("Profil Yükleniyor...", u.id);
                     let { data, error } = await sb.from('users').select('*').eq('id', u.id).limit(1);
-                    
                     if(error || !data || data.length === 0) {
-                        // ID ile bulunamazsa email ile dene
+                        console.log("Profil ID ile bulunamadı, email ile deneniyor...", u.email);
                         const res = await sb.from('users').select('*').eq('email', u.email).limit(1);
-                        if(res.data && res.data.length > 0) {
-                            data = res.data;
-                            error = res.error;
-                        }
+                        if(res.data && res.data.length > 0) { data = res.data; error = res.error; }
                     }
-
                     if(data && data.length > 0) {
                         const userProfile = data[0];
-                        
-                        // ONAY KONTROLÜ
-                        if (userProfile.status === 'pending' || userProfile.status === 'beklemede') {
-                            setPendingApproval(true);
-                            setProfile(userProfile); 
-                        } else {
-                            setPendingApproval(false);
-                            setProfile(userProfile);
-                        }
-                    } else {
-                        console.warn("Profil bulunamadı (public.users tablosunda kayıt yok)");
-                        setProfile(null);
-                    }
-                } catch(e) { 
-                    console.error("Profil Fetch Exception:", e);
-                    setProfile(null);
-                } finally {
-                    setProfileLoading(false);
-                }
+                        console.log("Profil Bulundu:", userProfile);
+                        if (userProfile.status === 'pending' || userProfile.status === 'beklemede') { setPendingApproval(true); setProfile(userProfile); } 
+                        else { setPendingApproval(false); setProfile(userProfile); }
+                    } else { console.warn("Profil bulunamadı"); setProfile(null); }
+                } catch(e) { console.error("Profil Fetch Exception:", e); setProfile(null); }
+                finally { setProfileLoading(false); }
             }, []);
 
             useEffect(() => {
                 let mounted = true;
-                
-                // İlk yüklemede mevcut oturumu kontrol et
-                sb.auth.getUser().then(({data}) => {
-                    if(mounted && data?.user) {
-                        setUser(data.user);
-                        fetchProfile(data.user);
-                    } else {
-                        setProfileLoading(false); // Kullanıcı yoksa loading'i kapat
-                    }
+                sb.auth.getUser().then(({data}) => { 
+                    if(mounted && data?.user) { setUser(data.user); fetchProfile(data.user); } 
+                    else { setProfileLoading(false); }
                 });
-                
-                // Oturum değişikliklerini dinle
                 const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => { 
                     if(!mounted) return;
-                    if(session?.user) { 
-                        setUser(session.user); 
-                        fetchProfile(session.user); 
-                    } else { 
-                        setUser(null); 
-                        setProfile(null); 
-                        setPendingApproval(false); 
-                        setProfileLoading(false); 
-                    }
+                    if(session?.user) { setUser(session.user); fetchProfile(session.user); } 
+                    else { setUser(null); setProfile(null); setPendingApproval(false); setProfileLoading(false); }
                 });
-                
-                return () => { 
-                    mounted = false; 
-                    if(subscription) subscription.unsubscribe(); 
-                };
+                return () => { mounted = false; if(subscription) subscription.unsubscribe(); };
             }, [fetchProfile]);
 
             if (profileLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="text-center"><Icon name="loader-2" className="animate-spin h-10 w-10 text-primary mx-auto mb-4" /><p className="text-slate-500">Yükleniyor...</p></div></div>;
             if(!user) return <Login onLogin={()=>{}} />;
-
-            // ONAY BEKLEME EKRANI
             if (pendingApproval) {
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
                         <div className="bg-white p-8 rounded-xl shadow-xl max-w-md text-center border-t-4 border-yellow-400">
-                            <div className="inline-block p-4 bg-yellow-50 rounded-full text-yellow-600 mb-4"><Icon name="clock" size={40} /></div>
-                            <h2 className="text-2xl font-bold text-slate-800 mb-2">Onay Bekleniyor</h2>
-                            <p className="text-slate-600 mb-6">Hesabınız oluşturuldu ancak yönetici onayı bekleniyor. Onaylandığında size e-posta ile bilgi verilecektir.</p>
-                            <button onClick={()=>sb.auth.signOut()} className="text-slate-500 hover:text-slate-800 underline">Çıkış Yap</button>
+                            <div className="inline-block p-4 bg-yellow-50 rounded-full text-yellow-600 mb-4"><Icon name="clock" size={40} /></div><h2 className="text-2xl font-bold text-slate-800 mb-2">Onay Bekleniyor</h2><p className="text-slate-600 mb-6">Hesabınız oluşturuldu ancak yönetici onayı bekleniyor. Onaylandığında size e-posta ile bilgi verilecektir.</p><button onClick={()=>sb.auth.signOut()} className="text-slate-500 hover:text-slate-800 underline">Çıkış Yap</button>
                         </div>
                     </div>
                 );
             }
-
             return <Dashboard user={user} profile={profile} onLogout={()=>sb.auth.signOut()} supabase={sb} />;
         };
 
