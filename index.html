@@ -113,7 +113,7 @@
 
         // --- BİLEŞENLER ---
         // GÜNCELLENEN: Metadata Ayarları (Basitleştirildi)
-        const MetadataSettings = ({ companyId, type, title, icon }) => {
+        const MetadataSettings = ({ companyId, type, title, icon, userRole }) => {
             const [items, setItems] = useState([]);
             const [newItem, setNewItem] = useState({ name: '', last4: '' });
             const [loading, setLoading] = useState(false);
@@ -173,15 +173,39 @@
                 }
 
                 try {
-                    const { error } = await sb.from(type).insert([payload]);
+                    // Debug bilgisi
+                    console.log(`${type} ekleme denemesi:`, {
+                        companyId,
+                        payload,
+                        userRole,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    const { error, data } = await sb.from(type).insert([payload]).select();
+                    
                     if (error) {
-                        console.error(`${type} ekleme hatası:`, error);
+                        console.error(`${type} ekleme hatası:`, {
+                            code: error.code,
+                            message: error.message,
+                            details: error.details,
+                            hint: error.hint,
+                            companyId,
+                            userRole,
+                            payload
+                        });
+                        
                         if (error.code === '42501' || error.message.includes('row-level security')) {
-                            alert(`Bu işlem için yetkiniz bulunmuyor. Lütfen yöneticinizle iletişime geçin.`);
+                            // RLS hatası - daha detaylı mesaj
+                            const debugInfo = userRole === 'admin' 
+                                ? `\n\nDebug: Admin rolü tespit edildi ancak RLS politikası izin vermiyor.\nCompany ID: ${companyId}\nLütfen Supabase RLS politikalarını kontrol edin.`
+                                : `\n\nDebug: Kullanıcı rolü: ${userRole || 'belirlenemedi'}\nCompany ID: ${companyId}`;
+                            
+                            alert(`Bu işlem için yetkiniz bulunmuyor. Lütfen yöneticinizle iletişime geçin.${debugInfo}`);
                         } else {
                             alert("Hata: " + error.message);
                         }
                     } else { 
+                        console.log(`${type} başarıyla eklendi:`, data);
                         setNewItem({ name: '', last4: '' }); 
                         fetchItems(); 
                     }
@@ -611,9 +635,9 @@
                     {/* METADATA AYARLARI (YENİ) */}
                     <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
                         <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full text-primary"><Icon name="list" size={24} /></div><div><h2 className="text-xl font-bold text-slate-800">Tanımlamalar</h2><p className="text-sm text-slate-500">Kategoriler, Projeler ve Kartlar</p></div></div>
-                        <MetadataSettings companyId={profile?.company_id} type="categories" title="Kategoriler" icon="tag" />
-                        <MetadataSettings companyId={profile?.company_id} type="projects" title="Projeler" icon="folder" />
-                        <MetadataSettings companyId={profile?.company_id} type="company_cards" title="Şirket Kartları" icon="credit-card" />
+                        <MetadataSettings companyId={profile?.company_id} type="categories" title="Kategoriler" icon="tag" userRole={profile?.role} />
+                        <MetadataSettings companyId={profile?.company_id} type="projects" title="Projeler" icon="folder" userRole={profile?.role} />
+                        <MetadataSettings companyId={profile?.company_id} type="company_cards" title="Şirket Kartları" icon="credit-card" userRole={profile?.role} />
                     </div>
 
                     <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm"><div className="flex items-center gap-3 mb-6"><div className="p-3 bg-slate-100 rounded-full text-slate-600"><Icon name="sparkles" size={24} /></div><div><h2 className="text-xl font-bold text-slate-800">Yapay Zeka</h2><p className="text-sm text-slate-500">Analiz için API anahtarı</p></div></div><div className="space-y-4"><div><label className="block text-sm font-medium text-slate-700 mb-1">Google Gemini API Anahtarı</label><input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="AIzaSy..." className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-ai outline-none font-mono text-sm"/></div><button onClick={saveSettings} className="px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition flex items-center gap-2">{saved ? <Icon name="check" size={18} /> : <Icon name="save" size={18} />} {saved ? 'Kaydedildi' : 'Kaydet'}</button></div></div>
