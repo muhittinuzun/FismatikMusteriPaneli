@@ -99,43 +99,30 @@
 
         // --- BİLEŞENLER ---
         
-        // YENİ: Veritabanı Onarım Bileşeni (GÜÇLENDİRİLDİ)
+        // YENİ: Veritabanı Onarım Bileşeni (GÜÇLENDİRİLDİ - CASCADE EKLEMESİ İLE)
         const DatabaseFix = () => {
             const sql = `-- BU KODU SUPABASE > SQL EDITOR EKRANINA YAPIŞTIRIN
--- 1. ID UYUŞMAZLIĞINI DÜZELT (SYNC)
--- E-posta adresi eşleşen ama ID'si farklı olan kayıtları onarır
-UPDATE public.users
-SET id = au.id
-FROM auth.users au
-WHERE public.users.email = au.email
-AND public.users.id != au.id;
+-- 1. CONSTRAINT GÜNCELLEME (Hata Çözümü: CASCADE Ekleme)
+ALTER TABLE public.fisler DROP CONSTRAINT IF EXISTS fk_fisler_users;
+ALTER TABLE public.fisler DROP CONSTRAINT IF EXISTS fisler_user_id_fkey; 
+ALTER TABLE public.fisler ADD CONSTRAINT fk_fisler_users FOREIGN KEY (user_id) REFERENCES public.users (id) ON DELETE CASCADE ON UPDATE CASCADE;
 
--- 2. GÜVENLİ FONKSİYONU GÜNCELLE (Smart Lookup)
-CREATE OR REPLACE FUNCTION public.get_current_user_company_id()
-RETURNS bigint
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  c_id bigint;
+-- 2. ID UYUŞMAZLIĞINI DÜZELT (SYNC)
+UPDATE public.users SET id = au.id FROM auth.users au WHERE public.users.email = au.email AND public.users.id != au.id;
+
+-- 3. GÜVENLİ FONKSİYONU GÜNCELLE
+CREATE OR REPLACE FUNCTION public.get_current_user_company_id() RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE c_id bigint;
 BEGIN
-  -- Önce ID ile dene
   SELECT company_id INTO c_id FROM public.users WHERE id = auth.uid();
-  
-  -- Bulunamazsa E-posta ile dene (Yedek Plan)
   IF c_id IS NULL THEN
-    SELECT u.company_id INTO c_id 
-    FROM public.users u
-    JOIN auth.users au ON u.email = au.email
-    WHERE au.id = auth.uid();
+    SELECT u.company_id INTO c_id FROM public.users u JOIN auth.users au ON u.email = au.email WHERE au.id = auth.uid();
   END IF;
-  
   RETURN c_id;
 END;
 $$;
 
--- 3. İZİNLERİ SIFIRLA VE YENİDEN VER
+-- 4. İZİNLERİ SIFIRLA VE YENİDEN VER
 GRANT USAGE ON SCHEMA public TO authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role;
@@ -159,7 +146,7 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
 
             const copySql = () => {
                 navigator.clipboard.writeText(sql);
-                alert("GÜÇLÜ ONARIM KODU KOPYALANDI!\n\nBu kod hem yetkileri düzeltir hem de bozulan kullanıcı ID'lerini eşitler.\n\nLütfen Supabase > SQL Editor'de çalıştırın.");
+                alert("GÜÇLÜ ONARIM KODU KOPYALANDI!\n\nLütfen Supabase > SQL Editor'de çalıştırın.");
             };
 
             return (
@@ -240,7 +227,7 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
                     if (error) {
                         console.error(`${type} ekleme hatası:`, error);
                         if (error.code === '42501' || error.message.includes('row-level security')) {
-                            alert(`YETKİ HATASI: Kullanıcı ID'niz veritabanıyla uyuşmuyor. Lütfen yukarıdaki 'Onarım Kodunu Kopyala' butonunu kullanın.`);
+                            alert(`YETKİ HATASI: Veritabanı izniniz eksik. Lütfen yukarıdaki 'Onarım Kodunu Kopyala' butonunu kullanın.`);
                         } else {
                             alert("Hata: " + error.message);
                         }
@@ -335,7 +322,10 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
                     setCompany(comp);
                     const { data: team } = await sb.from('users').select('*').eq('company_id', profile.company_id);
                     setUsers(team || []);
-                } catch (err) { console.error("Ekip verisi hatası:", err); }
+                } catch (err) {
+                    console.error("Ekip verisi hatası:", err);
+                }
+                
                 setLoading(false);
             }, [profile?.company_id]);
 
@@ -693,50 +683,23 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
             const [aiAnalysis, setAiAnalysis] = useState(null);
             const [aiLoading, setAiLoading] = useState(false);
 
-            // Veri Çekme - Hata Yönetimi ve Profil/Kullanıcı Kontrolü
             const fetchData = useCallback(async () => {
-                if(!user?.id) return;
-                
+                if(!user?.id) { setLoading(false); return; }
                 setLoading(true);
                 try {
+                    console.log("Veri çekiliyor...", { userId: user.id, companyId: profile?.company_id });
                     let q = sb.from('fisler').select('*').order('tarih', { ascending: false });
-                    
-                    if (profile?.company_id) {
-                        q = q.eq('company_id', profile.company_id);
-                    } else {
-                        q = q.eq('user_id', user.id);
-                    }
-
+                    if (profile?.company_id) { q = q.eq('company_id', profile.company_id); console.log("Şirket bazlı sorgu:", profile.company_id); } 
+                    else { q = q.eq('user_id', user.id); console.log("Kullanıcı bazlı sorgu:", user.id); }
                     const { data, error } = await q;
-
-                    if (!error) {
-                        setReceipts(data || []);
-                        const total = (data||[]).reduce((a,b)=>a+(b.toplam_tutar||0),0);
-                        const pending = (data||[]).filter(r=>r.durum==='beklemede').length;
-                        setStats({ total, count: data.length, pending });
-                    }
-                } catch(e) { console.error(e); }
-                setLoading(false);
+                    if (error) { console.error("Veri çekme hatası:", error); setReceipts([]); setStats({ total: 0, count: 0, pending: 0 }); } 
+                    else { console.log("Gelen Fişler:", data?.length || 0, "adet"); setReceipts(data || []); const total = (data||[]).reduce((a,b)=>a+(b.toplam_tutar||0),0); const pending = (data||[]).filter(r=>r.durum==='beklemede').length; setStats({ total, count: (data||[]).length, pending }); }
+                } catch(e) { console.error("Beklenmeyen hata:", e); setReceipts([]); setStats({ total: 0, count: 0, pending: 0 }); } 
+                finally { setLoading(false); }
             }, [user?.id, profile?.company_id]);
 
-            // Yerel (Optimistic) Güncelleme
-            const handleLocalUpdate = (updatedItem) => {
-                setReceipts(prev => prev.map(r => r.id === updatedItem.id ? updatedItem : r));
-            };
-
-            const runAiAnalysis = async () => {
-                const apiKey = localStorage.getItem('gemini_key');
-                if(!apiKey) return alert("API Anahtarı eksik.");
-                setAiLoading(true);
-                const data = { total: stats.total, count: stats.count, recent: receipts.slice(0,10) };
-                const prompt = `Analiz et: ${JSON.stringify(data)}. Türkçe, Markdown.`;
-                try {
-                    const res = await callGemini(apiKey, prompt);
-                    setAiAnalysis(res);
-                } catch(e) { alert(e.message); }
-                setAiLoading(false);
-            };
-
+            const handleLocalUpdate = (updatedItem) => { setReceipts(prev => prev.map(r => r.id === updatedItem.id ? updatedItem : r)); };
+            const runAiAnalysis = async () => { const apiKey = localStorage.getItem('gemini_key'); if(!apiKey) return alert("API Anahtarı eksik."); setAiLoading(true); const data = { total: stats.total, count: stats.count, recent: receipts.slice(0,10) }; const prompt = `Analiz et: ${JSON.stringify(data)}. Türkçe, Markdown.`; try { const res = await callGemini(apiKey, prompt); setAiAnalysis(res); } catch(e) { alert(e.message); } setAiLoading(false); };
             useEffect(() => { fetchData(); }, [fetchData]);
             useEffect(() => { lucide.createIcons(); }, [view, receipts, aiAnalysis]);
 
@@ -746,14 +709,11 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
                         <div className="p-6 flex items-center gap-2 border-b border-slate-100"><Icon name="receipt" className="text-primary" /><span className="font-bold text-lg text-slate-800">FişMatik</span></div>
                         <nav className="flex-1 p-4 space-y-1">
                             {['dashboard','receipts','reports','team','settings','about'].map(v => {
-                                // Ekip yönetimi sadece admin için
                                 if (v === 'team' && profile?.role !== 'admin') return null;
-                                return (
-                                    <button key={v} onClick={()=>setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view===v?'bg-blue-50 text-primary':'text-slate-600 hover:bg-slate-50'}`}>
-                                        <Icon name={v==='dashboard'?'layout-dashboard':v==='receipts'?'file-text':v==='reports'?'bar-chart-3':v==='team'?'users':v==='settings'?'settings':'info'} size={18}/> 
-                                        {v==='dashboard'?'Genel Bakış':v==='receipts'?'Fişlerim':v==='reports'?'Raporlar':v==='team'?'Ekip Yönetimi':v==='settings'?'Ayarlar':'Hakkında'}
-                                    </button>
-                                )
+                                return ( <button key={v} onClick={()=>setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view===v?'bg-blue-50 text-primary':'text-slate-600 hover:bg-slate-50'}`}>
+                                    <Icon name={v==='dashboard'?'layout-dashboard':v==='receipts'?'file-text':v==='reports'?'bar-chart-3':v==='team'?'users':v==='settings'?'settings':'info'} size={18}/> 
+                                    {v==='dashboard'?'Genel Bakış':v==='receipts'?'Fişlerim':v==='reports'?'Raporlar':v==='team'?'Ekip Yönetimi':v==='settings'?'Ayarlar':'Hakkında'}
+                                </button> )
                             })}
                         </nav>
                         <div className="p-4 border-t"><div className="mb-4 text-xs text-slate-500"><p className="font-bold text-slate-800 truncate">{profile?.full_name || user.email}</p><p>Rol: {profile?.role || 'User'}</p></div><button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16}/> Çıkış</button></div>
@@ -763,11 +723,7 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
                             <div className="space-y-6">
                                 <div className="flex justify-between items-center"><h2 className="text-2xl font-bold">Hoş Geldiniz</h2><button onClick={runAiAnalysis} disabled={aiLoading} className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded shadow flex gap-2 items-center">{aiLoading?<Icon name="loader-2" className="loading-spin"/>:<Icon name="sparkles"/>} Analiz</button></div>
                                 {aiAnalysis && <div className="bg-white p-6 rounded border border-violet-100 shadow ai-glow relative"><div className="text-sm markdown-body" dangerouslySetInnerHTML={{__html:marked.parse(aiAnalysis)}}></div><button onClick={()=>setAiAnalysis(null)} className="absolute top-4 right-4"><Icon name="x"/></button></div>}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <StatCard title="Toplam Harcama" value={stats.total.toLocaleString('tr-TR',{style:'currency',currency:'TRY'})} icon="wallet" color="text-green-600" bg="bg-green-50"/>
-                                    <StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50"/>
-                                    <StatCard title="Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50"/>
-                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><StatCard title="Toplam Harcama" value={stats.total.toLocaleString('tr-TR',{style:'currency',currency:'TRY'})} icon="wallet" color="text-green-600" bg="bg-green-50"/><StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50"/><StatCard title="Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50"/></div>
                                 <div className="bg-white p-6 rounded border shadow-sm"><h3 className="font-bold mb-4">Son Hareketler</h3><ReceiptsTable receipts={receipts.slice(0,5)} loading={loading} simple={true} /></div>
                             </div>
                         )}
@@ -781,7 +737,6 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
             );
         };
 
-        // --- APP ---
         const App = () => {
             const [user, setUser] = useState(null);
             const [profile, setProfile] = useState(null);
