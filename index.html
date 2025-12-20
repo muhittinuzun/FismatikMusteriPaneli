@@ -123,9 +123,22 @@
             }, [items]);
 
             const fetchItems = useCallback(async () => {
-                if (!companyId) return;
-                const { data } = await sb.from(type).select('*').eq('company_id', companyId).order('id');
-                setItems(data || []);
+                if (!companyId) {
+                    setItems([]);
+                    return;
+                }
+                try {
+                    const { data, error } = await sb.from(type).select('*').eq('company_id', companyId).order('id');
+                    if (error) {
+                        console.warn(`${type} yükleme hatası:`, error);
+                        setItems([]);
+                    } else {
+                        setItems(data || []);
+                    }
+                } catch (err) {
+                    console.error(`${type} yükleme exception:`, err);
+                    setItems([]);
+                }
             }, [companyId, type]);
 
             useEffect(() => { if(companyId) fetchItems(); }, [fetchItems]);
@@ -136,6 +149,11 @@
                     if (!newItem.last4 || newItem.last4.length < 4) return alert("Lütfen kartın son 4 hanesini giriniz.");
                 } else {
                     if (!newItem.name) return alert(`Lütfen ${title.toLowerCase()} adı giriniz.`);
+                }
+
+                if (!companyId) {
+                    alert("Şirket bilgisi bulunamadı. Lütfen tekrar giriş yapın.");
+                    return;
                 }
 
                 setLoading(true);
@@ -154,16 +172,45 @@
                     payload.last_4_digits = newItem.last4; 
                 }
 
-                const { error } = await sb.from(type).insert([payload]);
-                if (error) alert("Hata: " + error.message);
-                else { setNewItem({ name: '', last4: '' }); fetchItems(); }
-                setLoading(false);
+                try {
+                    const { error } = await sb.from(type).insert([payload]);
+                    if (error) {
+                        console.error(`${type} ekleme hatası:`, error);
+                        if (error.code === '42501' || error.message.includes('row-level security')) {
+                            alert(`Bu işlem için yetkiniz bulunmuyor. Lütfen yöneticinizle iletişime geçin.`);
+                        } else {
+                            alert("Hata: " + error.message);
+                        }
+                    } else { 
+                        setNewItem({ name: '', last4: '' }); 
+                        fetchItems(); 
+                    }
+                } catch (err) {
+                    console.error("Beklenmeyen hata:", err);
+                    alert("Bir hata oluştu. Lütfen tekrar deneyin.");
+                } finally {
+                    setLoading(false);
+                }
             };
 
             const deleteItem = async (id) => {
                 if(!confirm("Silmek istediğinize emin misiniz?")) return;
-                await sb.from(type).delete().eq('id', id);
-                fetchItems();
+                try {
+                    const { error } = await sb.from(type).delete().eq('id', id);
+                    if (error) {
+                        console.error(`${type} silme hatası:`, error);
+                        if (error.code === '42501' || error.message.includes('row-level security')) {
+                            alert(`Bu işlem için yetkiniz bulunmuyor. Lütfen yöneticinizle iletişime geçin.`);
+                        } else {
+                            alert("Hata: " + error.message);
+                        }
+                    } else {
+                        fetchItems();
+                    }
+                } catch (err) {
+                    console.error("Beklenmeyen hata:", err);
+                    alert("Bir hata oluştu. Lütfen tekrar deneyin.");
+                }
             };
 
             return (
@@ -226,9 +273,15 @@
                 if(!profile?.company_id) return;
                 setLoading(true);
                 try {
-                    const { data: comp, error: compError } = await sb.from('companies').select('*').eq('id', profile.company_id).single();
-                    if (compError) console.warn("Şirket bilgisi çekilemedi:", compError);
-                    setCompany(comp);
+                    const { data: compData, error: compError } = await sb.from('companies').select('*').eq('id', profile.company_id).limit(1);
+                    if (compError) {
+                        console.warn("Şirket bilgisi çekilemedi:", compError);
+                    } else if (compData && compData.length > 0) {
+                        setCompany(compData[0]);
+                    } else {
+                        console.warn("Şirket bulunamadı");
+                        setCompany(null);
+                    }
                     const { data: team } = await sb.from('users').select('*').eq('company_id', profile.company_id);
                     setUsers(team || []);
                 } catch (err) { console.error(err); }
@@ -329,8 +382,27 @@
 
             useEffect(() => {
                 if (profile?.company_id) {
-                    sb.from('categories').select('*').eq('company_id', profile.company_id).then(({data}) => setMetaCategories(data || []));
-                    sb.from('projects').select('*').eq('company_id', profile.company_id).then(({data}) => setMetaProjects(data || []));
+                    sb.from('categories').select('*').eq('company_id', profile.company_id)
+                        .then(({data, error}) => {
+                            if (error) {
+                                console.warn("Kategoriler yüklenemedi:", error);
+                                setMetaCategories([]);
+                            } else {
+                                setMetaCategories(data || []);
+                            }
+                        });
+                    sb.from('projects').select('*').eq('company_id', profile.company_id)
+                        .then(({data, error}) => {
+                            if (error) {
+                                console.warn("Projeler yüklenemedi:", error);
+                                setMetaProjects([]);
+                            } else {
+                                setMetaProjects(data || []);
+                            }
+                        });
+                } else {
+                    setMetaCategories([]);
+                    setMetaProjects([]);
                 }
             }, [profile?.company_id]);
 
