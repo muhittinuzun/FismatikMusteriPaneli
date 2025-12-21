@@ -43,12 +43,7 @@
         .markdown-body ul { list-style-type: disc; margin-left: 1.5rem; margin-top: 0.5rem; }
         .markdown-body strong { color: #4b5563; font-weight: 700; }
         .markdown-body p { margin-bottom: 0.75rem; }
-        
-        /* Görsel Manipülasyonu İçin */
-        .image-container {
-            /* JS ile kontrol edeceğiz, default transition */
-            transition: transform 0.2s ease-out;
-        }
+        .image-container { transition: transform 0.2s ease-out; }
     </style>
 </head>
 <body>
@@ -87,7 +82,6 @@
             return data.candidates?.[0]?.content?.parts?.[0]?.text || "Yanıt alınamadı.";
         };
 
-        // --- YARDIMCI FONKSİYONLAR ---
         const normalizePhone = (phone) => {
             if (!phone) return "";
             let clean = phone.replace(/\D/g, ''); 
@@ -99,50 +93,83 @@
 
         // --- BİLEŞENLER ---
         
-        // YENİ: Veritabanı Onarım Bileşeni (GÜÇLENDİRİLDİ - CASCADE EKLEMESİ İLE)
         const DatabaseFix = () => {
-            const sql = `-- BU KODU SUPABASE > SQL EDITOR EKRANINA YAPIŞTIRIN
--- 1. CONSTRAINT GÜNCELLEME (Hata Çözümü: CASCADE Ekleme)
-ALTER TABLE public.fisler DROP CONSTRAINT IF EXISTS fk_fisler_users;
-ALTER TABLE public.fisler DROP CONSTRAINT IF EXISTS fisler_user_id_fkey; 
-ALTER TABLE public.fisler ADD CONSTRAINT fk_fisler_users FOREIGN KEY (user_id) REFERENCES public.users (id) ON DELETE CASCADE ON UPDATE CASCADE;
+            const sql = `-- BU KODU SUPABASE > SQL EDITOR EKRANINA YAPIŞTIRIN VE ÇALIŞTIRIN (RUN)
 
--- 2. ID UYUŞMAZLIĞINI DÜZELT (SYNC)
-UPDATE public.users SET id = au.id FROM auth.users au WHERE public.users.email = au.email AND public.users.id != au.id;
+-- 1. YETKİLERİ GARANTİLE (GRANTS)
+GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO postgres, anon, authenticated, service_role;
 
--- 3. GÜVENLİ FONKSİYONU GÜNCELLE
-CREATE OR REPLACE FUNCTION public.get_current_user_company_id() RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE c_id bigint;
+-- 2. CONSTRAINT GÜNCELLEME (Hata Çözümü: CASCADE Ekleme)
+DO $$ 
 BEGIN
-  SELECT company_id INTO c_id FROM public.users WHERE id = auth.uid();
-  IF c_id IS NULL THEN
-    SELECT u.company_id INTO c_id FROM public.users u JOIN auth.users au ON u.email = au.email WHERE au.id = auth.uid();
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_fisler_users') THEN
+    ALTER TABLE public.fisler DROP CONSTRAINT fk_fisler_users;
   END IF;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fisler_user_id_fkey') THEN
+    ALTER TABLE public.fisler DROP CONSTRAINT fisler_user_id_fkey;
+  END IF;
+END $$;
+
+ALTER TABLE public.fisler 
+ADD CONSTRAINT fk_fisler_users 
+FOREIGN KEY (user_id) 
+REFERENCES public.users (id) 
+ON DELETE CASCADE 
+ON UPDATE CASCADE;
+
+-- 3. ID UYUŞMAZLIĞINI DÜZELT (SYNC)
+UPDATE public.users
+SET id = au.id
+FROM auth.users au
+WHERE public.users.email = au.email
+AND public.users.id != au.id;
+
+-- 4. GÜVENLİ FONKSİYONU GÜNCELLE (Smart Lookup)
+CREATE OR REPLACE FUNCTION public.get_current_user_company_id()
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  c_id bigint;
+BEGIN
+  -- Önce ID ile dene
+  SELECT company_id INTO c_id FROM public.users WHERE id = auth.uid();
+  
+  -- Bulunamazsa E-posta ile dene (Yedek Plan)
+  IF c_id IS NULL THEN
+    SELECT u.company_id INTO c_id 
+    FROM public.users u
+    JOIN auth.users au ON u.email = au.email
+    WHERE au.id = auth.uid();
+  END IF;
+  
   RETURN c_id;
 END;
 $$;
 
--- 4. İZİNLERİ SIFIRLA VE YENİDEN VER
-GRANT USAGE ON SCHEMA public TO authenticated, service_role;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role;
+-- 5. RLS POLİTİKALARINI SIFIRLA VE YENİDEN KUR
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.company_cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fisler ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Kategorileri yönet" ON public.categories;
 DROP POLICY IF EXISTS "Projeleri yönet" ON public.projects;
 DROP POLICY IF EXISTS "Kartları yönet" ON public.company_cards;
 DROP POLICY IF EXISTS "Fişleri yönet" ON public.fisler;
+DROP POLICY IF EXISTS "Şirketim" ON public.companies;
 
-ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Kategorileri yönet" ON public.categories FOR ALL USING (company_id = get_current_user_company_id());
-
-ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Projeleri yönet" ON public.projects FOR ALL USING (company_id = get_current_user_company_id());
-
-ALTER TABLE public.company_cards ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Kartları yönet" ON public.company_cards FOR ALL USING (company_id = get_current_user_company_id());
-
-ALTER TABLE public.fisler ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get_current_user_company_id());`;
+CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get_current_user_company_id());
+CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current_user_company_id());`;
 
             const copySql = () => {
                 navigator.clipboard.writeText(sql);
@@ -310,7 +337,7 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
             const [company, setCompany] = useState(null);
             const [loading, setLoading] = useState(false);
             const [showAddModal, setShowAddModal] = useState(false);
-            const [newUser, setNewUser] = useState({ email: '', full_name: '', password: '', role: 'user' });
+            const [newUser, setNewUser] = useState({ email: '', full_name: '', password: '', role: 'user', phone: '' });
             const [adding, setAdding] = useState(false);
 
             const fetchTeam = useCallback(async () => {
@@ -332,21 +359,48 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
             useEffect(() => { fetchTeam(); }, [fetchTeam]);
 
             const handleAddUser = async () => {
-                if (!company) { alert("Şirket bilgileri yüklenemedi."); return; }
+                if (!company) {
+                    alert("Şirket bilgileri yüklenemedi. Lütfen veritabanı izinlerini (RLS) kontrol edin.");
+                    return;
+                }
+                
                 const maxUsers = company.max_users || 5; 
-                if (users.length >= maxUsers) { alert(`Limit (${maxUsers}) doldu.`); return; }
+                if (users.length >= maxUsers) {
+                    alert(`Şirket kullanıcı limitinize (${maxUsers}) ulaştınız. Daha fazla kullanıcı ekleyemezsiniz. Lütfen FişMatik ekibi ile iletişime geçiniz.`);
+                    return;
+                }
+                
                 setAdding(true);
+                
                 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
                 const targetUrl = isLocalhost ? N8N_ADD_USER_URLS.TEST : N8N_ADD_USER_URLS.PROD;
+                
                 try {
                     await fetch(targetUrl, {
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ company_id: profile.company_id, email: newUser.email, full_name: newUser.full_name, password: newUser.password, role: newUser.role, manager_id: user.id })
+                        body: JSON.stringify({
+                            company_id: profile.company_id,
+                            email: newUser.email,
+                            full_name: newUser.full_name,
+                            password: newUser.password,
+                            role: newUser.role,
+                            phone: normalizePhone(newUser.phone),
+                            manager_id: user.id
+                        })
                     });
-                    alert("İstek gönderildi."); setShowAddModal(false); setNewUser({ email: '', full_name: '', password: '', role: 'user' }); setTimeout(fetchTeam, 3000);
-                } catch (error) { alert("Hata: " + error.message); } finally { setAdding(false); }
+                    
+                    alert("Kullanıcı oluşturma isteği gönderildi. Birkaç saniye içinde listede görünecektir.");
+                    setShowAddModal(false);
+                    setNewUser({ email: '', full_name: '', password: '', role: 'user', phone: '' });
+                    setTimeout(fetchTeam, 3000);
+
+                } catch (error) {
+                    alert("Hata: " + error.message);
+                } finally {
+                    setAdding(false);
+                }
             };
 
             if (loading) return <div className="text-center p-10 text-slate-400">Yükleniyor...</div>;
@@ -365,7 +419,9 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
                                     <tr key={u.id} className="hover:bg-slate-50">
                                         <td className="px-6 py-4 font-medium text-slate-800">{u.full_name || '-'}</td><td className="px-6 py-4 text-slate-600">{u.email}</td>
                                         <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{u.role === 'admin' ? 'Yönetici' : 'Personel'}</span></td>
-                                        <td className="px-6 py-4">{u.status === 'active' || u.status === 'onaylandi' ? <span className="text-green-600 flex items-center gap-1"><Icon name="check-circle" size={14}/> Aktif</span> : <span className="text-orange-500 flex items-center gap-1"><Icon name="clock" size={14}/> Beklemede</span>}</td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-green-600 flex items-center gap-1"><Icon name="check-circle" size={14}/> Aktif</span>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -378,6 +434,7 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
                                 <div className="space-y-3">
                                     <input type="text" placeholder="Ad Soyad" className="w-full p-2 border rounded" value={newUser.full_name} onChange={e=>setNewUser({...newUser, full_name:e.target.value})} />
                                     <input type="email" placeholder="E-Posta" className="w-full p-2 border rounded" value={newUser.email} onChange={e=>setNewUser({...newUser, email:e.target.value})} />
+                                    <input type="text" placeholder="Telefon (5XX...)" className="w-full p-2 border rounded" value={newUser.phone} onChange={e=>setNewUser({...newUser, phone:e.target.value})} />
                                     <input type="password" placeholder="Geçici Şifre" className="w-full p-2 border rounded" value={newUser.password} onChange={e=>setNewUser({...newUser, password:e.target.value})} />
                                     <select className="w-full p-2 border rounded" value={newUser.role} onChange={e=>setNewUser({...newUser, role:e.target.value})}><option value="user">Personel</option><option value="admin">Yönetici</option></select>
                                 </div>
@@ -547,7 +604,7 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
                                                 <label className="text-xs text-slate-500">Proje</label>
                                                 <select className="w-full border p-2 rounded bg-white" value={editItem.proje || ''} onChange={e=>setEditItem({...editItem, proje:e.target.value})}>
                                                     <option value="">Seçiniz</option>
-                                                    {metaProjects.map(p => <option key={p.id} value={p.name}>{p.name} ({p.code})</option>)}
+                                                    {metaProjects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                                                     <option value="Genel">Genel</option>
                                                 </select>
                                             </div>
@@ -710,10 +767,7 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
                         <nav className="flex-1 p-4 space-y-1">
                             {['dashboard','receipts','reports','team','settings','about'].map(v => {
                                 if (v === 'team' && profile?.role !== 'admin') return null;
-                                return ( <button key={v} onClick={()=>setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view===v?'bg-blue-50 text-primary':'text-slate-600 hover:bg-slate-50'}`}>
-                                    <Icon name={v==='dashboard'?'layout-dashboard':v==='receipts'?'file-text':v==='reports'?'bar-chart-3':v==='team'?'users':v==='settings'?'settings':'info'} size={18}/> 
-                                    {v==='dashboard'?'Genel Bakış':v==='receipts'?'Fişlerim':v==='reports'?'Raporlar':v==='team'?'Ekip Yönetimi':v==='settings'?'Ayarlar':'Hakkında'}
-                                </button> )
+                                return ( <button key={v} onClick={()=>setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view===v?'bg-blue-50 text-primary':'text-slate-600 hover:bg-slate-50'}`}><Icon name={v==='dashboard'?'layout-dashboard':v==='receipts'?'file-text':v==='reports'?'bar-chart-3':v==='team'?'users':v==='settings'?'settings':'info'} size={18}/> {v==='dashboard'?'Genel Bakış':v==='receipts'?'Fişlerim':v==='reports'?'Raporlar':v==='team'?'Ekip Yönetimi':v==='settings'?'Ayarlar':'Hakkında'}</button> )
                             })}
                         </nav>
                         <div className="p-4 border-t"><div className="mb-4 text-xs text-slate-500"><p className="font-bold text-slate-800 truncate">{profile?.full_name || user.email}</p><p>Rol: {profile?.role || 'User'}</p></div><button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16}/> Çıkış</button></div>
