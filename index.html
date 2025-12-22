@@ -43,12 +43,7 @@
         .markdown-body ul { list-style-type: disc; margin-left: 1.5rem; margin-top: 0.5rem; }
         .markdown-body strong { color: #4b5563; font-weight: 700; }
         .markdown-body p { margin-bottom: 0.75rem; }
-        
-        /* Görsel Manipülasyonu İçin */
-        .image-container {
-            /* JS ile kontrol edeceğiz, default transition */
-            transition: transform 0.2s ease-out;
-        }
+        .image-container { transition: transform 0.2s ease-out; }
     </style>
 </head>
 <body>
@@ -88,7 +83,6 @@
             return data.candidates?.[0]?.content?.parts?.[0]?.text || "Yanıt alınamadı.";
         };
 
-        // --- YARDIMCI FONKSİYONLAR ---
         const normalizePhone = (phone) => {
             if (!phone) return "";
             let clean = phone.replace(/\D/g, ''); 
@@ -100,17 +94,14 @@
 
         // --- BİLEŞENLER ---
         
-        // YENİ: Veritabanı Onarım Bileşeni (GÜÇLENDİRİLDİ - Users Tablosu İzni Eklendi)
         const DatabaseFix = () => {
             const sql = `-- BU KODU SUPABASE > SQL EDITOR EKRANINA YAPIŞTIRIN VE ÇALIŞTIRIN (RUN)
 
--- 1. YETKİLERİ GARANTİLE (GRANTS)
 GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
 GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO postgres, anon, authenticated, service_role;
 
--- 2. CONSTRAINT GÜNCELLEME (Hata Çözümü: CASCADE Ekleme)
 DO $$ 
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_fisler_users') THEN
@@ -128,35 +119,19 @@ REFERENCES public.users (id)
 ON DELETE CASCADE 
 ON UPDATE CASCADE;
 
--- 3. ID UYUŞMAZLIĞINI DÜZELT (SYNC)
 UPDATE public.users SET id = au.id FROM auth.users au WHERE public.users.email = au.email AND public.users.id != au.id;
 
--- 4. GÜVENLİ FONKSİYONU GÜNCELLE (Smart Lookup)
-CREATE OR REPLACE FUNCTION public.get_current_user_company_id()
-RETURNS bigint
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  c_id bigint;
+CREATE OR REPLACE FUNCTION public.get_current_user_company_id() RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE c_id bigint;
 BEGIN
-  -- Önce ID ile dene
   SELECT company_id INTO c_id FROM public.users WHERE id = auth.uid();
-  
-  -- Bulunamazsa E-posta ile dene (Yedek Plan)
   IF c_id IS NULL THEN
-    SELECT u.company_id INTO c_id 
-    FROM public.users u
-    JOIN auth.users au ON u.email = au.email
-    WHERE au.id = auth.uid();
+    SELECT u.company_id INTO c_id FROM public.users u JOIN auth.users au ON u.email = au.email WHERE au.id = auth.uid();
   END IF;
-  
   RETURN c_id;
 END;
 $$;
 
--- 5. RLS POLİTİKALARINI SIFIRLA VE YENİDEN KUR
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
@@ -173,12 +148,10 @@ DROP POLICY IF EXISTS "Şirketim" ON public.companies;
 DROP POLICY IF EXISTS "Kullanıcılar kendi profillerini görebilir" ON public.users;
 DROP POLICY IF EXISTS "Ekip arkadaşlarını gör" ON public.users;
 
--- USERS: Kendi profilini ve aynı şirketteki diğer kullanıcıları gör
 CREATE POLICY "Ekip arkadaşlarını gör" ON public.users FOR SELECT USING (
   id = auth.uid() OR company_id = get_current_user_company_id()
 );
 
--- DİĞER TABLOLAR: Şirket bazlı yetkilendirme
 CREATE POLICY "Kategorileri yönet" ON public.categories FOR ALL USING (company_id = get_current_user_company_id());
 CREATE POLICY "Projeleri yönet" ON public.projects FOR ALL USING (company_id = get_current_user_company_id());
 CREATE POLICY "Kartları yönet" ON public.company_cards FOR ALL USING (company_id = get_current_user_company_id());
@@ -206,7 +179,6 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                     console.error("Kopyalama hatası:", err);
                     alert("Kopyalama başarısız oldu. Lütfen aşağıdaki kodu manuel olarak seçip kopyalayın:\n\n" + sql.substring(0, 100) + "...");
                 }
-                
                 document.body.removeChild(textArea);
             };
 
@@ -387,6 +359,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                 } catch (err) {
                     console.error("Ekip verisi hatası:", err);
                 }
+                
                 setLoading(false);
             }, [profile?.company_id]);
 
@@ -464,14 +437,9 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                         <td className="px-6 py-4 font-medium text-slate-800">{u.full_name || '-'}</td><td className="px-6 py-4 text-slate-600">{u.email}</td>
                                         <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{u.role === 'admin' ? 'Yönetici' : 'Personel'}</span></td>
                                         <td className="px-6 py-4">
-                                            {/* Durum Göstergesi Düzeltildi: Her zaman Aktif varsayılıyor */}
-                                            {u.status === 'pending' || u.status === 'beklemede' ? 
-                                                <span className="text-orange-500 flex items-center gap-1"><Icon name="clock" size={14}/> Beklemede</span> :
-                                                <span className="text-green-600 flex items-center gap-1"><Icon name="check-circle" size={14}/> Aktif</span>
-                                            }
+                                            {u.status === 'active' || u.status === 'onaylandi' ? <span className="text-green-600 flex items-center gap-1"><Icon name="check-circle" size={14}/> Aktif</span> : <span className="text-orange-500 flex items-center gap-1"><Icon name="clock" size={14}/> Beklemede</span>}
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            {/* Kendini silemesin */}
                                             {u.id !== user.id && (
                                                 <button 
                                                     onClick={(e) => handleDeleteUser(u.id, e)} 
@@ -487,7 +455,6 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                             </tbody>
                         </table>
                     </div>
-                    {/* ... Modal Code ... */}
                     {showAddModal && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                             <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md animate-in fade-in zoom-in duration-200">
