@@ -43,7 +43,12 @@
         .markdown-body ul { list-style-type: disc; margin-left: 1.5rem; margin-top: 0.5rem; }
         .markdown-body strong { color: #4b5563; font-weight: 700; }
         .markdown-body p { margin-bottom: 0.75rem; }
-        .image-container { transition: transform 0.2s ease-out; }
+        
+        /* Görsel Manipülasyonu İçin */
+        .image-container {
+            /* JS ile kontrol edeceğiz, default transition */
+            transition: transform 0.2s ease-out;
+        }
     </style>
 </head>
 <body>
@@ -52,16 +57,6 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useCallback, useRef } = React;
         const { createClient } = supabase;
-
-        // --- YARDIMCI FONKSİYONLAR (EN ÜSTTE TANIMLANDI) ---
-        const normalizePhone = (phone) => {
-            if (!phone) return "";
-            let clean = phone.replace(/\D/g, ''); 
-            if (clean.startsWith('0')) clean = clean.substring(1);
-            if (clean.startsWith('90') && clean.length > 10) clean = clean.substring(2);
-            if (clean.length === 10) return "+90" + clean;
-            return "+" + clean;
-        };
 
         // --- AYARLAR ---
         const DEFAULT_SB_URL = "https://hequoxateionmtfjzkxl.supabase.co";
@@ -73,8 +68,6 @@
         const N8N_RESET_PW_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
         const N8N_REGISTER_URLS = { TEST: "https://n8n.ittyazilim.com/webhook-test/030dfb1b-49f9-4dc8-82e3-98b884f3065c", PROD: "https://n8n.ittyazilim.com/webhook/030dfb1b-49f9-4dc8-82e3-98b884f3065c" };
         const N8N_ADD_USER_URLS = { TEST: "https://n8n.ittyazilim.com/webhook-test/alt-kullanici-ekle", PROD: "https://n8n.ittyazilim.com/webhook/alt-kullanici-ekle" };
-        
-        // YENİ: Kullanıcı Silme Webhook'u (Henüz oluşturmadıysanız n8n'de bu path ile oluşturun)
         const N8N_DELETE_USER_URLS = { TEST: "https://n8n.ittyazilim.com/webhook-test/kullanici-sil", PROD: "https://n8n.ittyazilim.com/webhook/kullanici-sil" };
 
         const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
@@ -95,8 +88,19 @@
             return data.candidates?.[0]?.content?.parts?.[0]?.text || "Yanıt alınamadı.";
         };
 
+        // --- YARDIMCI FONKSİYONLAR ---
+        const normalizePhone = (phone) => {
+            if (!phone) return "";
+            let clean = phone.replace(/\D/g, ''); 
+            if (clean.startsWith('0')) clean = clean.substring(1);
+            if (clean.startsWith('90') && clean.length > 10) clean = clean.substring(2);
+            if (clean.length === 10) return "+90" + clean;
+            return "+" + clean;
+        };
+
         // --- BİLEŞENLER ---
         
+        // YENİ: Veritabanı Onarım Bileşeni (GÜÇLENDİRİLDİ - Users Tablosu İzni Eklendi)
         const DatabaseFix = () => {
             const sql = `-- BU KODU SUPABASE > SQL EDITOR EKRANINA YAPIŞTIRIN VE ÇALIŞTIRIN (RUN)
 
@@ -106,7 +110,28 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, servi
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
 GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO postgres, anon, authenticated, service_role;
 
--- 2. GÜVENLİ FONKSİYONU GÜNCELLE (Smart Lookup)
+-- 2. CONSTRAINT GÜNCELLEME (Hata Çözümü: CASCADE Ekleme)
+DO $$ 
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_fisler_users') THEN
+    ALTER TABLE public.fisler DROP CONSTRAINT fk_fisler_users;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fisler_user_id_fkey') THEN
+    ALTER TABLE public.fisler DROP CONSTRAINT fisler_user_id_fkey;
+  END IF;
+END $$;
+
+ALTER TABLE public.fisler 
+ADD CONSTRAINT fk_fisler_users 
+FOREIGN KEY (user_id) 
+REFERENCES public.users (id) 
+ON DELETE CASCADE 
+ON UPDATE CASCADE;
+
+-- 3. ID UYUŞMAZLIĞINI DÜZELT (SYNC)
+UPDATE public.users SET id = au.id FROM auth.users au WHERE public.users.email = au.email AND public.users.id != au.id;
+
+-- 4. GÜVENLİ FONKSİYONU GÜNCELLE (Smart Lookup)
 CREATE OR REPLACE FUNCTION public.get_current_user_company_id()
 RETURNS bigint
 LANGUAGE plpgsql
@@ -119,7 +144,7 @@ BEGIN
   -- Önce ID ile dene
   SELECT company_id INTO c_id FROM public.users WHERE id = auth.uid();
   
-  -- Bulunamazsa E-posta ile dene (Yedek Plan - Sync için gerekli)
+  -- Bulunamazsa E-posta ile dene (Yedek Plan)
   IF c_id IS NULL THEN
     SELECT u.company_id INTO c_id 
     FROM public.users u
@@ -131,27 +156,29 @@ BEGIN
 END;
 $$;
 
--- 3. İZİNLERİ SIFIRLA VE YENİDEN VER (KAPSAMLI)
+-- 5. RLS POLİTİKALARINI SIFIRLA VE YENİDEN KUR
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.company_cards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fisler ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Kullanıcılar kendi profillerini görebilir" ON public.users;
-DROP POLICY IF EXISTS "Ekip arkadaşlarını gör" ON public.users;
 DROP POLICY IF EXISTS "Kategorileri yönet" ON public.categories;
 DROP POLICY IF EXISTS "Projeleri yönet" ON public.projects;
 DROP POLICY IF EXISTS "Kartları yönet" ON public.company_cards;
 DROP POLICY IF EXISTS "Fişleri yönet" ON public.fisler;
 DROP POLICY IF EXISTS "Şirketim" ON public.companies;
+DROP POLICY IF EXISTS "Kullanıcılar kendi profillerini görebilir" ON public.users;
+DROP POLICY IF EXISTS "Ekip arkadaşlarını gör" ON public.users;
 
--- YENİ: Kullanıcılar kendi profillerini ve AYNI ŞİRKETTEKİ diğer kişileri görebilir
+-- USERS: Kendi profilini ve aynı şirketteki diğer kullanıcıları gör
 CREATE POLICY "Ekip arkadaşlarını gör" ON public.users FOR SELECT USING (
   id = auth.uid() OR company_id = get_current_user_company_id()
 );
 
+-- DİĞER TABLOLAR: Şirket bazlı yetkilendirme
 CREATE POLICY "Kategorileri yönet" ON public.categories FOR ALL USING (company_id = get_current_user_company_id());
 CREATE POLICY "Projeleri yönet" ON public.projects FOR ALL USING (company_id = get_current_user_company_id());
 CREATE POLICY "Kartları yönet" ON public.company_cards FOR ALL USING (company_id = get_current_user_company_id());
@@ -159,8 +186,28 @@ CREATE POLICY "Fişleri yönet" ON public.fisler FOR ALL USING (company_id = get
 CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current_user_company_id());`;
 
             const copySql = () => {
-                navigator.clipboard.writeText(sql);
-                alert("YENİ GÜVENLİK KODU KOPYALANDI!\n\nBu kod, ekip arkadaşlarınızı görmenizi sağlayacak yetkileri içerir.\n\nLütfen Supabase > SQL Editor'de çalıştırın.");
+                const textArea = document.createElement("textarea");
+                textArea.value = sql;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                textArea.style.top = "0";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+
+                try {
+                    const successful = document.execCommand('copy');
+                    if(successful) {
+                         alert("GÜÇLÜ ONARIM KODU KOPYALANDI!\n\nBu kod hem yetkileri düzeltir hem de bozulan kullanıcı ID'lerini eşitler.\n\nLütfen Supabase > SQL Editor'de çalıştırın.");
+                    } else {
+                        throw new Error("Kopyalama başarısız");
+                    }
+                } catch (err) {
+                    console.error("Kopyalama hatası:", err);
+                    alert("Kopyalama başarısız oldu. Lütfen aşağıdaki kodu manuel olarak seçip kopyalayın:\n\n" + sql.substring(0, 100) + "...");
+                }
+                
+                document.body.removeChild(textArea);
             };
 
             return (
@@ -168,12 +215,12 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                     <div className="flex items-start gap-3">
                         <div className="text-amber-600 mt-1"><Icon name="alert-triangle" size={24}/></div>
                         <div>
-                            <h3 className="font-bold text-amber-800 text-sm">Veritabanı İzin/Görünürlük Sorunu Mu Var?</h3>
+                            <h3 className="font-bold text-amber-800 text-sm">Veritabanı İzin Sorunu Mu Var?</h3>
                             <p className="text-amber-700 text-xs mt-1 mb-3">
-                                Ekip listeniz boş geliyorsa veya yetki hatası alıyorsanız bu kodu çalıştırın.
+                                Eğer "Kaydetme Hatası" veya "Yetkiniz Yok" uyarısı alıyorsanız, veritabanı izinlerini ve kullanıcı eşleşmelerini onarmanız gerekir.
                             </p>
                             <button onClick={copySql} className="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-amber-700 flex items-center gap-1 transition">
-                                <Icon name="database" size={14}/> Onarım Kodunu Kopyala (Ekip Görünürlüğü)
+                                <Icon name="database" size={14}/> Onarım Kodunu Kopyala (Tam Çözüm)
                             </button>
                         </div>
                     </div>
@@ -319,7 +366,6 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             </div>
         );
 
-        // --- GÜNCELLENEN: Ekip Yönetimi Bileşeni (Silme Butonu Eklendi) ---
         const TeamManagement = ({ user, profile }) => {
             const [users, setUsers] = useState([]);
             const [company, setCompany] = useState(null);
@@ -327,7 +373,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             const [showAddModal, setShowAddModal] = useState(false);
             const [newUser, setNewUser] = useState({ email: '', full_name: '', password: '', role: 'user', phone: '' });
             const [adding, setAdding] = useState(false);
-            const [deleting, setDeleting] = useState(null); // Silinen user id'si
+            const [deleting, setDeleting] = useState(null);
 
             const fetchTeam = useCallback(async () => {
                 if(!profile?.company_id) return;
@@ -378,10 +424,8 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                 } catch (error) { alert("Hata: " + error.message); } finally { setAdding(false); }
             };
 
-            // YENİ: Kullanıcı Silme Fonksiyonu
             const handleDeleteUser = async (userIdToDelete, e) => {
                 if(!confirm("Bu kullanıcıyı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
-                
                 setDeleting(userIdToDelete);
                 
                 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -400,11 +444,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                     });
                     alert("Silme isteği gönderildi.");
                     setTimeout(fetchTeam, 2000);
-                } catch (error) {
-                    alert("Silme hatası: " + error.message);
-                } finally {
-                    setDeleting(null);
-                }
+                } catch (error) { alert("Silme hatası: " + error.message); } finally { setDeleting(null); }
             };
 
             if (loading) return <div className="text-center p-10 text-slate-400">Yükleniyor...</div>;
@@ -424,7 +464,11 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                         <td className="px-6 py-4 font-medium text-slate-800">{u.full_name || '-'}</td><td className="px-6 py-4 text-slate-600">{u.email}</td>
                                         <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{u.role === 'admin' ? 'Yönetici' : 'Personel'}</span></td>
                                         <td className="px-6 py-4">
-                                            {u.status === 'active' || u.status === 'onaylandi' ? <span className="text-green-600 flex items-center gap-1"><Icon name="check-circle" size={14}/> Aktif</span> : <span className="text-orange-500 flex items-center gap-1"><Icon name="clock" size={14}/> Beklemede</span>}
+                                            {/* Durum Göstergesi Düzeltildi: Her zaman Aktif varsayılıyor */}
+                                            {u.status === 'pending' || u.status === 'beklemede' ? 
+                                                <span className="text-orange-500 flex items-center gap-1"><Icon name="clock" size={14}/> Beklemede</span> :
+                                                <span className="text-green-600 flex items-center gap-1"><Icon name="check-circle" size={14}/> Aktif</span>
+                                            }
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             {/* Kendini silemesin */}
@@ -559,7 +603,8 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                         durum: updatedItem.durum,
                         kategori: updatedItem.kategori,
                         proje: updatedItem.proje, 
-                        ocr_detaylari: updatedItem.ocr_detaylari
+                        ocr_detaylari: updatedItem.ocr_detaylari,
+                        fis_no: updatedItem.fis_no // --- EKLENEN FİŞ NO ---
                     }).eq('id', updatedItem.id);
                     if (refresh) refresh(); 
                 } catch (e) { alert("Hata: " + e.message); if (refresh) refresh(); } finally { setIsSaving(false); }
@@ -616,6 +661,10 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                         <div className="grid grid-cols-2 gap-4">
                                             <div><label className="text-xs text-slate-500">İşletme</label><input className="w-full border p-2 rounded" value={editItem.isletme_adi} onChange={e=>setEditItem({...editItem, isletme_adi:e.target.value})} /></div>
                                             <div><label className="text-xs text-slate-500">Tarih</label><input type="datetime-local" className="w-full border p-2 rounded" value={editItem.tarih ? editItem.tarih.slice(0,16) : ''} onChange={e=>setEditItem({...editItem, tarih:e.target.value})} /></div>
+                                            
+                                            {/* --- YENİ EKLENEN FİŞ NO ALANI --- */}
+                                            <div><label className="text-xs text-slate-500">Fiş No</label><input className="w-full border p-2 rounded" value={editItem.fis_no || ''} onChange={e=>setEditItem({...editItem, fis_no:e.target.value})} /></div>
+                                            
                                             <div><label className="text-xs text-slate-500">Tutar</label><input type="number" step="0.01" className="w-full border p-2 rounded font-bold" value={editItem.toplam_tutar} onChange={e=>setEditItem({...editItem, toplam_tutar:e.target.value})} /></div>
                                             <div><label className="text-xs text-slate-500">Durum</label><select className="w-full border p-2 rounded" value={editItem.durum} onChange={e=>setEditItem({...editItem, durum:e.target.value})}><option value="beklemede">Beklemede</option><option value="onaylandi">Onaylandı</option><option value="reddedildi">Reddedildi</option><option value="mukerrer">Mükerrer</option><option value="rapor alindi">Rapor Alındı</option></select></div>
                                             
@@ -752,7 +801,6 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             );
         };
 
-        // --- DASHBOARD (ANA BİLEŞEN) ---
         const Dashboard = ({ user, profile, supabase, onLogout }) => {
             const [view, setView] = useState('dashboard');
             const [receipts, setReceipts] = useState([]);
@@ -761,50 +809,23 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             const [aiAnalysis, setAiAnalysis] = useState(null);
             const [aiLoading, setAiLoading] = useState(false);
 
-            // Veri Çekme - Hata Yönetimi ve Profil/Kullanıcı Kontrolü
             const fetchData = useCallback(async () => {
-                if(!user?.id) return;
-                
+                if(!user?.id) { setLoading(false); return; }
                 setLoading(true);
                 try {
+                    console.log("Veri çekiliyor...", { userId: user.id, companyId: profile?.company_id });
                     let q = sb.from('fisler').select('*').order('tarih', { ascending: false });
-                    
-                    if (profile?.company_id) {
-                        q = q.eq('company_id', profile.company_id);
-                    } else {
-                        q = q.eq('user_id', user.id);
-                    }
-
+                    if (profile?.company_id) { q = q.eq('company_id', profile.company_id); console.log("Şirket bazlı sorgu:", profile.company_id); } 
+                    else { q = q.eq('user_id', user.id); console.log("Kullanıcı bazlı sorgu:", user.id); }
                     const { data, error } = await q;
-
-                    if (!error) {
-                        setReceipts(data || []);
-                        const total = (data||[]).reduce((a,b)=>a+(b.toplam_tutar||0),0);
-                        const pending = (data||[]).filter(r=>r.durum==='beklemede').length;
-                        setStats({ total, count: data.length, pending });
-                    }
-                } catch(e) { console.error(e); }
-                setLoading(false);
+                    if (error) { console.error("Veri çekme hatası:", error); setReceipts([]); setStats({ total: 0, count: 0, pending: 0 }); } 
+                    else { console.log("Gelen Fişler:", data?.length || 0, "adet"); setReceipts(data || []); const total = (data||[]).reduce((a,b)=>a+(b.toplam_tutar||0),0); const pending = (data||[]).filter(r=>r.durum==='beklemede').length; setStats({ total, count: (data||[]).length, pending }); }
+                } catch(e) { console.error("Beklenmeyen hata:", e); setReceipts([]); setStats({ total: 0, count: 0, pending: 0 }); } 
+                finally { setLoading(false); }
             }, [user?.id, profile?.company_id]);
 
-            // Yerel (Optimistic) Güncelleme
-            const handleLocalUpdate = (updatedItem) => {
-                setReceipts(prev => prev.map(r => r.id === updatedItem.id ? updatedItem : r));
-            };
-
-            const runAiAnalysis = async () => {
-                const apiKey = localStorage.getItem('gemini_key');
-                if(!apiKey) return alert("API Anahtarı eksik.");
-                setAiLoading(true);
-                const data = { total: stats.total, count: stats.count, recent: receipts.slice(0,10) };
-                const prompt = `Analiz et: ${JSON.stringify(data)}. Türkçe, Markdown.`;
-                try {
-                    const res = await callGemini(apiKey, prompt);
-                    setAiAnalysis(res);
-                } catch(e) { alert(e.message); }
-                setAiLoading(false);
-            };
-
+            const handleLocalUpdate = (updatedItem) => { setReceipts(prev => prev.map(r => r.id === updatedItem.id ? updatedItem : r)); };
+            const runAiAnalysis = async () => { const apiKey = localStorage.getItem('gemini_key'); if(!apiKey) return alert("API Anahtarı eksik."); setAiLoading(true); const data = { total: stats.total, count: stats.count, recent: receipts.slice(0,10) }; const prompt = `Analiz et: ${JSON.stringify(data)}. Türkçe, Markdown.`; try { const res = await callGemini(apiKey, prompt); setAiAnalysis(res); } catch(e) { alert(e.message); } setAiLoading(false); };
             useEffect(() => { fetchData(); }, [fetchData]);
             useEffect(() => { lucide.createIcons(); }, [view, receipts, aiAnalysis]);
 
@@ -814,14 +835,8 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                         <div className="p-6 flex items-center gap-2 border-b border-slate-100"><Icon name="receipt" className="text-primary" /><span className="font-bold text-lg text-slate-800">FişMatik</span></div>
                         <nav className="flex-1 p-4 space-y-1">
                             {['dashboard','receipts','reports','team','settings','about'].map(v => {
-                                // Ekip yönetimi sadece admin için
                                 if (v === 'team' && profile?.role !== 'admin') return null;
-                                return (
-                                    <button key={v} onClick={()=>setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view===v?'bg-blue-50 text-primary':'text-slate-600 hover:bg-slate-50'}`}>
-                                        <Icon name={v==='dashboard'?'layout-dashboard':v==='receipts'?'file-text':v==='reports'?'bar-chart-3':v==='team'?'users':v==='settings'?'settings':'info'} size={18}/> 
-                                        {v==='dashboard'?'Genel Bakış':v==='receipts'?'Fişlerim':v==='reports'?'Raporlar':v==='team'?'Ekip Yönetimi':v==='settings'?'Ayarlar':'Hakkında'}
-                                    </button>
-                                )
+                                return ( <button key={v} onClick={()=>setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view===v?'bg-blue-50 text-primary':'text-slate-600 hover:bg-slate-50'}`}><Icon name={v==='dashboard'?'layout-dashboard':v==='receipts'?'file-text':v==='reports'?'bar-chart-3':v==='team'?'users':v==='settings'?'settings':'info'} size={18}/> {v==='dashboard'?'Genel Bakış':v==='receipts'?'Fişlerim':v==='reports'?'Raporlar':v==='team'?'Ekip Yönetimi':v==='settings'?'Ayarlar':'Hakkında'}</button> )
                             })}
                         </nav>
                         <div className="p-4 border-t"><div className="mb-4 text-xs text-slate-500"><p className="font-bold text-slate-800 truncate">{profile?.full_name || user.email}</p><p>Rol: {profile?.role || 'User'}</p></div><button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16}/> Çıkış</button></div>
@@ -831,73 +846,72 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                             <div className="space-y-6">
                                 <div className="flex justify-between items-center"><h2 className="text-2xl font-bold">Hoş Geldiniz</h2><button onClick={runAiAnalysis} disabled={aiLoading} className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded shadow flex gap-2 items-center">{aiLoading?<Icon name="loader-2" className="loading-spin"/>:<Icon name="sparkles"/>} Analiz</button></div>
                                 {aiAnalysis && <div className="bg-white p-6 rounded border border-violet-100 shadow ai-glow relative"><div className="text-sm markdown-body" dangerouslySetInnerHTML={{__html:marked.parse(aiAnalysis)}}></div><button onClick={()=>setAiAnalysis(null)} className="absolute top-4 right-4"><Icon name="x"/></button></div>}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <StatCard title="Toplam Harcama" value={stats.total.toLocaleString('tr-TR',{style:'currency',currency:'TRY'})} icon="wallet" color="text-green-600" bg="bg-green-50"/>
-                                    <StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50"/>
-                                    <StatCard title="Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50"/>
-                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><StatCard title="Toplam Harcama" value={stats.total.toLocaleString('tr-TR',{style:'currency',currency:'TRY'})} icon="wallet" color="text-green-600" bg="bg-green-50"/><StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50"/><StatCard title="Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50"/></div>
                                 <div className="bg-white p-6 rounded border shadow-sm"><h3 className="font-bold mb-4">Son Hareketler</h3><ReceiptsTable receipts={receipts.slice(0,5)} loading={loading} simple={true} /></div>
                             </div>
                         )}
-                        {view==='receipts' && <div className="bg-white rounded border shadow-sm p-4 h-full flex flex-col"><div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Fiş Kayıtları</h2><button onClick={fetchData}><Icon name="refresh-ccw"/></button></div><ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData} onLocalUpdate={handleLocalUpdate} userRole={profile?.role} /></div>}
+                        {view==='receipts' && <div className="bg-white rounded border shadow-sm p-4 h-full flex flex-col"><div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Fiş Kayıtları</h2><button onClick={fetchData}><Icon name="refresh-ccw"/></button></div><ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData} onLocalUpdate={handleLocalUpdate} userRole={profile?.role} profile={profile} /></div>}
                         {view==='reports' && <div className="max-w-xl mx-auto mt-10"><ReportCard user={user} profile={profile}/></div>}
                         {view==='team' && <div className="max-w-4xl mx-auto mt-5"><TeamManagement user={user} profile={profile} /></div>}
-                        {view==='settings' && <Settings />}
+                        {view==='settings' && <Settings user={user} profile={profile} />}
                         {view==='about' && <div className="max-w-3xl mx-auto bg-white p-8 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in duration-300"><div className="text-center mb-8 border-b border-slate-100 pb-6"><h2 className="text-2xl font-bold text-slate-800">Hakkımızda</h2></div><AboutContent /></div>}
                     </main>
                 </div>
             );
         };
 
-        // --- APP ---
         const App = () => {
             const [user, setUser] = useState(null);
             const [profile, setProfile] = useState(null);
             const [pendingApproval, setPendingApproval] = useState(false);
+            const [profileLoading, setProfileLoading] = useState(true);
 
-            const fetchProfile = async (u) => {
+            const fetchProfile = useCallback(async (u) => {
+                if(!u?.id) return;
+                setProfileLoading(true);
                 try {
+                    console.log("Profil Yükleniyor...", u.id);
                     let { data, error } = await sb.from('users').select('*').eq('id', u.id).limit(1);
+                    if(error || !data || data.length === 0) {
+                        console.log("Profil ID ile bulunamadı, email ile deneniyor...", u.email);
+                        const res = await sb.from('users').select('*').eq('email', u.email).limit(1);
+                        if(res.data && res.data.length > 0) { data = res.data; error = res.error; }
+                    }
                     if(data && data.length > 0) {
                         const userProfile = data[0];
-                        // ONAY KONTROLÜ
-                        if (userProfile.status === 'pending' || userProfile.status === 'beklemede') {
-                            setPendingApproval(true);
-                            setProfile(userProfile); // Profil yine de lazım
-                        } else {
-                            setPendingApproval(false);
-                            setProfile(userProfile);
-                        }
-                    }
-                } catch(e) { console.error(e); }
-            };
+                        console.log("Profil Bulundu:", userProfile);
+                        if (userProfile.status === 'pending' || userProfile.status === 'beklemede') { setPendingApproval(true); setProfile(userProfile); } 
+                        else { setPendingApproval(false); setProfile(userProfile); }
+                    } else { console.warn("Profil bulunamadı"); setProfile(null); }
+                } catch(e) { console.error("Profil Fetch Exception:", e); setProfile(null); }
+                finally { setProfileLoading(false); }
+            }, []);
 
             useEffect(() => {
                 let mounted = true;
+                sb.auth.getUser().then(({data}) => { 
+                    if(mounted && data?.user) { setUser(data.user); fetchProfile(data.user); } 
+                    else { setProfileLoading(false); }
+                });
                 const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => { 
                     if(!mounted) return;
                     if(session?.user) { setUser(session.user); fetchProfile(session.user); } 
-                    else { setUser(null); setProfile(null); setPendingApproval(false); }
+                    else { setUser(null); setProfile(null); setPendingApproval(false); setProfileLoading(false); }
                 });
-                return () => { mounted = false; subscription.unsubscribe(); };
-            }, []);
+                return () => { mounted = false; if(subscription) subscription.unsubscribe(); };
+            }, [fetchProfile]);
 
+            if (profileLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="text-center"><Icon name="loader-2" className="animate-spin h-10 w-10 text-primary mx-auto mb-4" /><p className="text-slate-500">Yükleniyor...</p></div></div>;
             if(!user) return <Login onLogin={()=>{}} />;
-
-            // ONAY BEKLEME EKRANI
             if (pendingApproval) {
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
                         <div className="bg-white p-8 rounded-xl shadow-xl max-w-md text-center border-t-4 border-yellow-400">
-                            <div className="inline-block p-4 bg-yellow-50 rounded-full text-yellow-600 mb-4"><Icon name="clock" size={40} /></div>
-                            <h2 className="text-2xl font-bold text-slate-800 mb-2">Onay Bekleniyor</h2>
-                            <p className="text-slate-600 mb-6">Hesabınız oluşturuldu ancak yönetici onayı bekleniyor. Onaylandığında size e-posta ile bilgi verilecektir.</p>
-                            <button onClick={()=>sb.auth.signOut()} className="text-slate-500 hover:text-slate-800 underline">Çıkış Yap</button>
+                            <div className="inline-block p-4 bg-yellow-50 rounded-full text-yellow-600 mb-4"><Icon name="clock" size={40} /></div><h2 className="text-2xl font-bold text-slate-800 mb-2">Onay Bekleniyor</h2><p className="text-slate-600 mb-6">Hesabınız oluşturuldu ancak yönetici onayı bekleniyor. Onaylandığında size e-posta ile bilgi verilecektir.</p><button onClick={()=>sb.auth.signOut()} className="text-slate-500 hover:text-slate-800 underline">Çıkış Yap</button>
                         </div>
                     </div>
                 );
             }
-
             return <Dashboard user={user} profile={profile} onLogout={()=>sb.auth.signOut()} supabase={sb} />;
         };
 
