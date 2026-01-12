@@ -1418,52 +1418,52 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
         };
 
         const Dashboard = ({ user, profile, supabase, onLogout }) => {
-                const [view, setView] = useState('dashboard');
-                const [receipts, setReceipts] = useState([]);
-                const [loading, setLoading] = useState(true);
-                const [stats, setStats] = useState({ total: 0, count: 0, pending: 0 });
-                const [aiAnalysis, setAiAnalysis] = useState(null);
-                const [aiLoading, setAiLoading] = useState(false);
+            const [view, setView] = useState('dashboard');
+            const [receipts, setReceipts] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [stats, setStats] = useState({ total: 0, count: 0, pending: 0 });
+            const [aiAnalysis, setAiAnalysis] = useState(null);
+            const [aiLoading, setAiLoading] = useState(false);
 
-                const fetchData = useCallback(async () => {
-                    if (!user?.id) { setLoading(false); return; }
-                    setLoading(true);
-                    try {
-                        let q = sb.from('fisler').select('*').order('tarih', { ascending: false });
-                        if (profile?.company_id) { q = q.eq('company_id', profile.company_id); }
-                        else { q = q.eq('user_id', user.id); }
-                        const { data, error } = await q;
-                        if (!error) {
-                            setReceipts(data || []);
-                            const total = (data || []).reduce((a, b) => a + (b.toplam_tutar || 0), 0);
-                            const pending = (data || []).filter(r => r.durum === 'beklemede').length;
-                            setStats({ total, count: (data || []).length, pending });
-                        } else { setReceipts([]); }
-                    } catch (e) { setReceipts([]); }
-                    finally { setLoading(false); }
-                }, [user?.id, profile?.company_id]);
+            const fetchData = useCallback(async () => {
+                if (!user?.id) { setLoading(false); return; }
+                setLoading(true);
+                try {
+                    let q = sb.from('fisler').select('*').order('tarih', { ascending: false });
+                    if (profile?.company_id) { q = q.eq('company_id', profile.company_id); }
+                    else { q = q.eq('user_id', user.id); }
+                    const { data, error } = await q;
+                    if (!error) {
+                        setReceipts(data || []);
+                        const total = (data || []).reduce((a, b) => a + (b.toplam_tutar || 0), 0);
+                        const pending = (data || []).filter(r => r.durum === 'beklemede').length;
+                        setStats({ total, count: (data || []).length, pending });
+                    } else { setReceipts([]); }
+                } catch (e) { setReceipts([]); }
+                finally { setLoading(false); }
+            }, [user?.id, profile?.company_id]);
 
-                const handleLocalUpdate = (updatedItem) => {
-                    setReceipts(prev => prev.map(r => r.id === updatedItem.id ? updatedItem : r));
-                };
+            const handleLocalUpdate = (updatedItem) => {
+                setReceipts(prev => prev.map(r => r.id === updatedItem.id ? updatedItem : r));
+            };
 
-                const runAiAnalysis = async () => {
-                    const apiKey = localStorage.getItem('fismatik_gemini_key');
-                    if (!apiKey) {
-                        alert("Yapay zeka analizini kullanabilmek için Ayarlar sayfasından Gemini API anahtarınızı tanımlamanız gerekmektedir.");
-                        return;
-                    }
+            const runAiAnalysis = async () => {
+                const apiKey = localStorage.getItem('fismatik_gemini_key');
+                if (!apiKey) {
+                    alert("Yapay zeka analizini kullanabilmek için Ayarlar sayfasından Gemini API anahtarınızı tanımlamanız gerekmektedir.");
+                    return;
+                }
 
-                    setAiLoading(true);
-                    setAiAnalysis(null);
+                setAiLoading(true);
+                setAiAnalysis(null);
 
-                    try {
-                        const recentReceipts = receipts.slice(0, 20);
-                        const receiptsSummary = recentReceipts.map(r =>
-                            `- Tarih: ${r.tarih}, İşletme: ${r.isletme_adi}, Tutar: ${r.toplam_tutar} TL, Kategori: ${r.kategori}`
-                        ).join('\n');
+                try {
+                    const recentReceipts = receipts.slice(0, 20);
+                    const receiptsSummary = recentReceipts.map(r =>
+                        `- Tarih: ${r.tarih}, İşletme: ${r.isletme_adi}, Tutar: ${r.toplam_tutar} TL, Kategori: ${r.kategori}`
+                    ).join('\n');
 
-                        const prompt = `Aşağıdaki son harcama fişi verilerini analiz et ve bana şunları içeren kısa bir özet rapor sun:
+                    const prompt = `Aşağıdaki son harcama fişi verilerini analiz et ve bana şunları içeren kısa bir özet rapor sun:
                     1. Harcamalarımın genel özeti.
                     2. En çok hangi kategoride harcama yapılmış?
                     3. Tasarruf için 3 spesifik öneri.
@@ -1474,21 +1474,21 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                     Veriler:
                     ${receiptsSummary}`;
 
-                        const result = await callGemini(apiKey, prompt);
-                        setAiAnalysis(result);
-                    } catch (err) {
-                        console.error("AI Analiz Hatası:", err);
-                        alert("Analiz sırasında bir hata oluştu: " + err.message);
-                    } finally {
-                        setAiLoading(false);
-                    }
-                };
+                    const result = await callGemini(apiKey, prompt);
+                    setAiAnalysis(result);
+                } catch (err) {
+                    console.error("AI Analiz Hatası:", err);
+                    alert("Analiz sırasında bir hata oluştu: " + err.message);
+                } finally {
+                    setAiLoading(false);
+                }
+            };
 
-                useEffect(() => { fetchData(); }, [fetchData]);
-                useEffect(() => { /* İkonlar artık otomatik render ediliyor */ }, [view, receipts]);
+            useEffect(() => { fetchData(); }, [fetchData]);
+            useEffect(() => { /* İkonlar artık otomatik render ediliyor */ }, [view, receipts]);
 
-                return (
-                    <div className="min-h-screen flex flex-col md:flex-row">
+            return (
+                <div className="min-h-screen flex flex-col md:flex-row">
                         <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col z-20">
                             <div className="p-6 flex items-center gap-2 border-b border-slate-100"><Icon name="receipt" className="text-primary" /><span className="font-bold text-lg text-slate-800">FişMatik</span></div>
                             <nav className="flex-1 p-4 space-y-1">
@@ -1554,9 +1554,9 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                             {view === 'settings' && <Settings user={user} profile={profile} />}
                             {view === 'about' && <div className="max-w-3xl mx-auto bg-white p-8 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in duration-300"><div className="text-center mb-8 border-b border-slate-100 pb-6"><h2 className="text-2xl font-bold text-slate-800">Hakkımızda</h2></div><AboutContent /></div>}
                         </main>
-                    </div>
-                );
-            };
+                </div>
+            );
+        };
 
             const App = () => {
                 const [user, setUser] = useState(null);
