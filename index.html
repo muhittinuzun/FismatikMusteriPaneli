@@ -135,8 +135,22 @@
         const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
 
         const Icon = ({ name, size = 20, className }) => {
+            const [lucideReady, setLucideReady] = useState(false);
+
+            useEffect(() => {
+                // Lucide yüklenene kadar kontrol et
+                const checkLucide = setInterval(() => {
+                    if (typeof lucide !== 'undefined' && lucide && lucide.icons) {
+                        setLucideReady(true);
+                        clearInterval(checkLucide);
+                    }
+                }, 100);
+
+                return () => clearInterval(checkLucide);
+            }, []);
+
             // Lucide kütüphanesi yüklenene kadar boş span döndür
-            if (typeof lucide === 'undefined' || !lucide || !lucide.icons) {
+            if (!lucideReady || typeof lucide === 'undefined' || !lucide || !lucide.icons) {
                 return <span style={{ width: size, height: size, display: 'inline-block' }} className={className}></span>;
             }
 
@@ -188,6 +202,7 @@
                                 <th className="py-2">İşletme</th>
                                 <th className="py-2">Açıklama</th>
                                 <th className="py-2">Kategori</th>
+                                <th className="py-2">Kart Son 4</th>
                                 <th className="py-2 text-right">Tutar</th>
                             </tr>
                         </thead>
@@ -201,15 +216,16 @@
                                         {item.ocr_detaylari?.map(d => d.aciklama || d.UrunTuru).join(', ')}
                                     </td>
                                     <td className="py-2">{item.kategori}</td>
+                                    <td className="py-2 text-slate-600">{item.kart_son_4 || '-'}</td>
                                     <td className="py-2 text-right font-bold">{formatMoney(item.toplam_tutar)}</td>
                                 </tr>
                             )) : (
-                                <tr><td colSpan="6" className="py-10 text-center text-slate-400">Bu bölümde listelenecek fiş bulunamadı.</td></tr>
+                                <tr><td colSpan="7" className="py-10 text-center text-slate-400">Bu bölümde listelenecek fiş bulunamadı.</td></tr>
                             )}
                         </tbody>
                         <tfoot className="border-t-2 border-slate-800 font-bold">
                             <tr>
-                                <td colSpan="5" className="py-3 text-right">GENEL TOPLAM:</td>
+                                <td colSpan="6" className="py-3 text-right">GENEL TOPLAM:</td>
                                 <td className="py-3 text-right text-lg">{formatMoney(total)}</td>
                             </tr>
                         </tfoot>
