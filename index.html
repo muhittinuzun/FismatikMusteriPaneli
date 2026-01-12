@@ -1415,8 +1415,9 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                     )}
                 </div>
             );
+        };
 
-            const Dashboard = ({ user, profile, supabase, onLogout }) => {
+        const Dashboard = ({ user, profile, supabase, onLogout }) => {
                 const [view, setView] = useState('dashboard');
                 const [receipts, setReceipts] = useState([]);
                 const [loading, setLoading] = useState(true);
