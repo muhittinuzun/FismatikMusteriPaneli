@@ -135,7 +135,14 @@
         const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
 
         const Icon = ({ name, size = 20, className }) => {
-            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+            const icon = lucide.icons[name] || lucide.icons['help-circle'];
+            const svg = icon.toSvg({
+                width: size,
+                height: size,
+                class: className,
+                'stroke-width': 2
+            });
+            return <span className="inline-flex items-center justify-center lucide-icon-wrapper" dangerouslySetInnerHTML={{ __html: svg }} />;
         };
 
         // --- YARDIMCI FONKSİYONLAR ---
@@ -149,7 +156,7 @@
         };
 
         const callGemini = async (apiKey, prompt) => {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -300,7 +307,6 @@
                     </div>
 
                     <div className="space-y-6">
-                        <DatabaseFix />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <MetadataSettings companyId={profile?.company_id} type="categories" title="Kategoriler" icon="tag" />
                             <MetadataSettings companyId={profile?.company_id} type="projects" title="Projeler" icon="folder" />
@@ -750,8 +756,8 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                 }
             }, [profile?.company_id]);
 
-            useEffect(() => { if (editItem) { setImgRotation(0); setImgZoom(1); setPan({ x: 0, y: 0 }); lucide.createIcons(); } }, [editItem]);
-            useEffect(() => { lucide.createIcons(); }, [imgRotation, imgZoom, pan, filtered, loading]);
+            useEffect(() => { if (editItem) { setImgRotation(0); setImgZoom(1); setPan({ x: 0, y: 0 }); } }, [editItem]);
+            useEffect(() => { /* İkonlar artık otomatik render ediliyor */ }, [imgRotation, imgZoom, pan, filtered, loading]);
             const handleMouseDown = (e) => { e.preventDefault(); setIsDragging(true); setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }); };
             const handleMouseMove = (e) => { if (!isDragging) return; e.preventDefault(); setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }); };
             const handleMouseUp = () => { setIsDragging(false); };
@@ -805,7 +811,8 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                         kategori: updatedItem.kategori,
                         proje: updatedItem.proje,
                         ocr_detaylari: updatedItem.ocr_detaylari,
-                        fis_no: updatedItem.fis_no
+                        fis_no: updatedItem.fis_no,
+                        kart_son_4: updatedItem.kart_son_4
                     }).eq('id', updatedItem.id);
                     if (refresh) refresh();
                 } catch (e) { alert("Hata: " + e.message); if (refresh) refresh(); } finally { setIsSaving(false); }
@@ -867,6 +874,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                             <div><label className="text-xs text-slate-500">Fiş No</label><input className="w-full border p-2 rounded" value={editItem.fis_no || ''} onChange={e => setEditItem({ ...editItem, fis_no: e.target.value })} /></div>
 
                                             <div><label className="text-xs text-slate-500">Tutar</label><input type="number" step="0.01" className="w-full border p-2 rounded font-bold" value={editItem.toplam_tutar} onChange={e => setEditItem({ ...editItem, toplam_tutar: e.target.value })} /></div>
+                                            <div><label className="text-xs text-slate-500">Kart Son 4</label><input className="w-full border p-2 rounded" placeholder="Örn: 1234" value={editItem.kart_son_4 || ''} onChange={e => setEditItem({ ...editItem, kart_son_4: e.target.value })} /></div>
                                             <div><label className="text-xs text-slate-500">Durum</label><select className="w-full border p-2 rounded" value={editItem.durum} onChange={e => setEditItem({ ...editItem, durum: e.target.value })}><option value="beklemede">Beklemede</option><option value="onaylandi">Onaylandı</option><option value="reddedildi">Reddedildi</option><option value="mukerrer">Mükerrer</option><option value="rapor alindi">Rapor Alındı</option></select></div>
 
                                             {/* PROJE SEÇİMİ (YENİ) */}
@@ -945,39 +953,61 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                     // 2. Fişleri Çek
                     let query = sb.from('fisler').select('*')
                         .eq('company_id', profile.company_id)
+                        .in('durum', ['onaylandi', 'beklemede', 'Onaylandı', 'Beklemede']) // Sadece bu durumlar
                         .gte('tarih', dates.start)
                         .lte('tarih', dates.end + ' 23:59:59')
                         .order('tarih', { ascending: true });
 
-                    const { data: fisler } = await query;
+                    const { data: fisler, error: fetchError } = await query;
+                    if (fetchError) throw fetchError;
 
                     if (fisler) {
+                        // --- MÜKERRER KONTROLÜ VE FİLTRELEME ---
+                        const seen = new Map();
+                        const uniqueFisler = [];
+                        const duplicatesToUpdate = [];
+
+                        fisler.forEach(f => {
+                            // Parmak izi: İşletme adı (normalize), Tarih, Net Tutar, Fiş No
+                            const normalizedBusiness = (f.isletme_adi || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+                            const dateStr = f.tarih ? f.tarih.slice(0, 10) : 'no-date';
+                            const fingerprint = `${normalizedBusiness}|${dateStr}|${f.toplam_tutar || 0}|${f.fis_no || ''}`;
+
+                            if (seen.has(fingerprint)) {
+                                duplicatesToUpdate.push(f.id);
+                            } else {
+                                seen.set(fingerprint, true);
+                                uniqueFisler.push(f);
+                            }
+                        });
+
+                        // Mükerrerleri toplu güncelle
+                        if (duplicatesToUpdate.length > 0) {
+                            sb.from('fisler').update({ durum: 'mukerrer' }).in('id', duplicatesToUpdate).then(() => { });
+                        }
+
                         // GRUPLAMA MANTIĞI
                         let cardGroups = {};
                         let projectGroups = {};
-                        let allItems = [];
 
-                        fisler.forEach(f => {
+                        uniqueFisler.forEach(f => {
                             const isCC = (f.odeme_tipi === 'Kredi Kartı' || f.odeme_tipi === 'Kredi Karti');
                             const isCompanyCard = isCC && f.kart_son_4 && cardNumbers.has(f.kart_son_4);
-
-                            // Genel Listeye Ekle
-                            allItems.push(f);
 
                             if (isCompanyCard) {
                                 const key = f.kart_son_4;
                                 if (!cardGroups[key]) cardGroups[key] = { title: `Kredi Kartı - ${key}`, items: [], total: 0 };
                                 cardGroups[key].items.push(f);
-                                cardGroups[key].total += f.toplam_tutar;
+                                cardGroups[key].total += (f.toplam_tutar || 0);
                             } else {
-                                const key = (f.proje && f.proje !== "Seçiniz") ? f.proje : "Genel/Belirsiz";
+                                const key = (f.proje && f.proje !== "Seçiniz" && f.proje !== "") ? f.proje : "Genel/Belirsiz";
                                 if (!projectGroups[key]) projectGroups[key] = { title: `Proje - ${key}`, items: [], total: 0 };
                                 projectGroups[key].items.push(f);
-                                projectGroups[key].total += f.toplam_tutar;
+                                projectGroups[key].total += (f.toplam_tutar || 0);
                             }
                         });
 
-                        setReportData({ cardGroups, projectGroups, allItems });
+                        setReportData({ cardGroups, projectGroups, allItems: uniqueFisler });
                     }
                 } catch (e) {
                     console.error(e);
@@ -1218,7 +1248,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             };
 
             useEffect(() => { fetchData(); }, [fetchData]);
-            useEffect(() => { lucide.createIcons(); }, [view, receipts]);
+            useEffect(() => { /* İkonlar artık otomatik render ediliyor */ }, [view, receipts]);
 
             return (
                 <div className="min-h-screen flex flex-col md:flex-row">
