@@ -135,16 +135,27 @@
         const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
 
         const Icon = ({ name, size = 20, className }) => {
-            if (typeof lucide === 'undefined' || !lucide.icons) return <span style={{ width: size, height: size }} className={className}></span>;
+            // Lucide kütüphanesi yüklenene kadar boş span döndür
+            if (typeof lucide === 'undefined' || !lucide || !lucide.icons) {
+                return <span style={{ width: size, height: size, display: 'inline-block' }} className={className}></span>;
+            }
+
             const icon = lucide.icons[name] || lucide.icons['help-circle'];
-            if (!icon) return <span style={{ width: size, height: size }} className={className}></span>;
-            const svg = icon.toSvg({
-                width: size,
-                height: size,
-                class: className,
-                'stroke-width': 2
-            });
-            return <span className="inline-flex items-center justify-center lucide-icon-wrapper" dangerouslySetInnerHTML={{ __html: svg }} />;
+            if (!icon || typeof icon.toSvg !== 'function') {
+                return <span style={{ width: size, height: size, display: 'inline-block' }} className={className}></span>;
+            }
+
+            try {
+                const svg = icon.toSvg({
+                    width: size,
+                    height: size,
+                    class: className,
+                    'stroke-width': 2
+                });
+                return <span className="inline-flex items-center justify-center lucide-icon-wrapper" dangerouslySetInnerHTML={{ __html: svg }} />;
+            } catch (e) {
+                return <span style={{ width: size, height: size, display: 'inline-block' }} className={className}></span>;
+            }
         };
 
         const ReportTable = ({ title, items, total, profile, dates }) => {
