@@ -135,7 +135,9 @@
         const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
 
         const Icon = ({ name, size = 20, className }) => {
+            if (typeof lucide === 'undefined' || !lucide.icons) return <span style={{ width: size, height: size }} className={className}></span>;
             const icon = lucide.icons[name] || lucide.icons['help-circle'];
+            if (!icon) return <span style={{ width: size, height: size }} className={className}></span>;
             const svg = icon.toSvg({
                 width: size,
                 height: size,
@@ -143,6 +145,81 @@
                 'stroke-width': 2
             });
             return <span className="inline-flex items-center justify-center lucide-icon-wrapper" dangerouslySetInnerHTML={{ __html: svg }} />;
+        };
+
+        const ReportTable = ({ title, items, total, profile, dates }) => {
+            const formatMoney = (amount) => {
+                return amount?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
+            };
+            return (
+                <div className="report-page mb-8 break-inside-avoid shadow-sm bg-white p-6 rounded-lg border border-slate-100">
+                    <div className="border-b-2 border-slate-800 pb-4 mb-4 flex justify-between items-end">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800">{profile?.company_name || "Şirket Adı"}</h2>
+                            <p className="text-slate-500 text-sm">Harcama Raporu</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="font-bold text-lg">{title}</p>
+                            <p className="text-xs text-slate-500">{new Date().toLocaleDateString('tr-TR')}</p>
+                        </div>
+                    </div>
+
+                    <div className="mb-4 text-xs text-slate-500 flex gap-4">
+                        <span className="bg-slate-100 px-2 py-1 rounded">Başlangıç: <b>{dates?.start}</b></span>
+                        <span className="bg-slate-100 px-2 py-1 rounded">Bitiş: <b>{dates?.end}</b></span>
+                    </div>
+
+                    <table className="w-full text-left text-xs mb-6">
+                        <thead className="border-b-2 border-slate-200 text-slate-500 uppercase">
+                            <tr>
+                                <th className="py-2">Tarih</th>
+                                <th className="py-2">Fiş No</th>
+                                <th className="py-2">İşletme</th>
+                                <th className="py-2">Açıklama</th>
+                                <th className="py-2">Kategori</th>
+                                <th className="py-2 text-right">Tutar</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {items.length > 0 ? items.map(item => (
+                                <tr key={item.id}>
+                                    <td className="py-2">{item.tarih ? new Date(item.tarih).toLocaleDateString('tr-TR') : '-'}</td>
+                                    <td className="py-2">{item.fis_no || '-'}</td>
+                                    <td className="py-2 font-medium">{item.isletme_adi}</td>
+                                    <td className="py-2 text-slate-500 truncate max-w-[150px]">
+                                        {item.ocr_detaylari?.map(d => d.aciklama || d.UrunTuru).join(', ')}
+                                    </td>
+                                    <td className="py-2">{item.kategori}</td>
+                                    <td className="py-2 text-right font-bold">{formatMoney(item.toplam_tutar)}</td>
+                                </tr>
+                            )) : (
+                                <tr><td colSpan="6" className="py-10 text-center text-slate-400">Bu bölümde listelenecek fiş bulunamadı.</td></tr>
+                            )}
+                        </tbody>
+                        <tfoot className="border-t-2 border-slate-800 font-bold">
+                            <tr>
+                                <td colSpan="5" className="py-3 text-right">GENEL TOPLAM:</td>
+                                <td className="py-3 text-right text-lg">{formatMoney(total)}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+
+                    <div className="grid grid-cols-3 gap-8 mt-12 text-center text-xs text-slate-400">
+                        <div>
+                            <p className="font-bold mb-8 text-slate-800">TESLİM EDEN</p>
+                            <div className="border-t border-slate-300 pt-2">İmza</div>
+                        </div>
+                        <div>
+                            <p className="font-bold mb-8 text-slate-800">KONTROL EDEN</p>
+                            <div className="border-t border-slate-300 pt-2">İmza</div>
+                        </div>
+                        <div>
+                            <p className="font-bold mb-8 text-slate-800">ONAYLAYAN</p>
+                            <div className="border-t border-slate-300 pt-2">İmza</div>
+                        </div>
+                    </div>
+                </div>
+            );
         };
 
         // --- YARDIMCI FONKSİYONLAR ---
@@ -169,7 +246,7 @@
 
         // --- BİLEŞENLER ---
         // --- LOGIN BİLEŞENİ ---
-        const Login = ({ onLogin }) => {
+        const Login = ({ onLogin, onForgotPassword, onRegister, onAbout }) => {
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
             const [loading, setLoading] = useState(false);
@@ -244,6 +321,15 @@
                                 {loading ? <Icon name="loader-2" className="animate-spin" size={20} /> : "Giriş Yap"}
                             </button>
                         </form>
+                        <div className="px-8 pb-6 space-y-3">
+                            <div className="flex justify-between items-center text-sm">
+                                <button onClick={onForgotPassword} className="text-primary hover:underline">Şifremi Unuttum</button>
+                                <button onClick={onRegister} className="text-primary hover:underline">Yeni Kayıt</button>
+                            </div>
+                            <button onClick={onAbout} className="w-full text-slate-600 hover:text-primary text-sm flex items-center justify-center gap-1">
+                                <Icon name="info" size={14} /> Hakkında
+                            </button>
+                        </div>
                         <div className="p-6 bg-slate-50 text-center border-t border-slate-100">
                             <p className="text-xs text-slate-500">2025 İTT Yazılım &copy; Tüm hakları saklıdır.</p>
                         </div>
@@ -451,7 +537,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             const [loading, setLoading] = useState(false);
 
             useEffect(() => {
-                lucide.createIcons();
+                // İkonlar artık Icon bileşeni ile SVG olarak basılıyor
             }, [items]);
 
             const fetchItems = useCallback(async () => {
@@ -1029,77 +1115,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                 html2pdf().set(opt).from(element).save();
             };
 
-            const formatMoney = (amount) => {
-                return amount?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
-            };
 
-            const ReportTable = ({ title, items, total }) => (
-                <div className="report-page mb-8 break-inside-avoid">
-                    <div className="border-b-2 border-slate-800 pb-4 mb-4 flex justify-between items-end">
-                        <div>
-                            <h2 className="text-2xl font-bold text-slate-800">{profile?.company_name || "Şirket Adı"}</h2>
-                            <p className="text-slate-500 text-sm">Harcama Raporu</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="font-bold text-lg">{title}</p>
-                            <p className="text-xs text-slate-500">{new Date().toLocaleDateString('tr-TR')}</p>
-                        </div>
-                    </div>
-
-                    <div className="mb-4 text-xs text-slate-500 flex gap-4">
-                        <span className="bg-slate-100 px-2 py-1 rounded">Başlangıç: <b>{dates.start}</b></span>
-                        <span className="bg-slate-100 px-2 py-1 rounded">Bitiş: <b>{dates.end}</b></span>
-                    </div>
-
-                    <table className="w-full text-left text-xs mb-6">
-                        <thead className="border-b-2 border-slate-200 text-slate-500 uppercase">
-                            <tr>
-                                <th className="py-2">Tarih</th>
-                                <th className="py-2">Fiş No</th>
-                                <th className="py-2">İşletme</th>
-                                <th className="py-2">Açıklama</th>
-                                <th className="py-2">Kategori</th>
-                                <th className="py-2 text-right">Tutar</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {items.map(item => (
-                                <tr key={item.id}>
-                                    <td className="py-2">{new Date(item.tarih).toLocaleDateString('tr-TR')}</td>
-                                    <td className="py-2">{item.fis_no || '-'}</td>
-                                    <td className="py-2 font-medium">{item.isletme_adi}</td>
-                                    <td className="py-2 text-slate-500 truncate max-w-[150px]">
-                                        {item.ocr_detaylari?.map(d => d.aciklama || d.UrunTuru).join(', ')}
-                                    </td>
-                                    <td className="py-2">{item.kategori}</td>
-                                    <td className="py-2 text-right font-bold">{formatMoney(item.toplam_tutar)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                        <tfoot className="border-t-2 border-slate-800 font-bold">
-                            <tr>
-                                <td colSpan="5" className="py-3 text-right">GENEL TOPLAM:</td>
-                                <td className="py-3 text-right text-lg">{formatMoney(total)}</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-
-                    <div className="grid grid-cols-3 gap-8 mt-12 text-center text-xs text-slate-400">
-                        <div>
-                            <p className="font-bold mb-8 text-slate-800">TESLİM EDEN</p>
-                            <div className="border-t border-slate-300 pt-2">İmza</div>
-                        </div>
-                        <div>
-                            <p className="font-bold mb-8 text-slate-800">KONTROL EDEN</p>
-                            <div className="border-t border-slate-300 pt-2">İmza</div>
-                        </div>
-                        <div>
-                            <p className="font-bold mb-8 text-slate-800">ONAYLAYAN</p>
-                            <div className="border-t border-slate-300 pt-2">İmza</div>
-                        </div>
-                    </div>
-                </div>
-            );
 
             return (
                 <div className="flex flex-col h-full">
@@ -1146,6 +1162,8 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                         title={reportData.cardGroups[key].title}
                                         items={reportData.cardGroups[key].items}
                                         total={reportData.cardGroups[key].total}
+                                        profile={profile}
+                                        dates={dates}
                                     />
                                 ))}
 
@@ -1156,15 +1174,19 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                         title={reportData.projectGroups[key].title}
                                         items={reportData.projectGroups[key].items}
                                         total={reportData.projectGroups[key].total}
+                                        profile={profile}
+                                        dates={dates}
                                     />
                                 ))}
 
-                                {/* Genel Liste (Sadece 'Tümünü Göster'de en sonda çıksın istenirse) */}
+                                {/* Genel Liste */}
                                 {activeTab === 'all' && (
                                     <ReportTable
                                         title="GENEL DÖKÜM LİSTESİ"
                                         items={reportData.allItems}
-                                        total={reportData.allItems.reduce((a, b) => a + b.toplam_tutar, 0)}
+                                        total={reportData.allItems.reduce((a, b) => a + (b.toplam_tutar || 0), 0)}
+                                        profile={profile}
+                                        dates={dates}
                                     />
                                 )}
                             </div>
@@ -1326,6 +1348,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             const [profile, setProfile] = useState(null);
             const [pendingApproval, setPendingApproval] = useState(false);
             const [profileLoading, setProfileLoading] = useState(true);
+            const [showAbout, setShowAbout] = useState(false);
 
             const fetchProfile = useCallback(async (u) => {
                 if (!u?.id) return;
@@ -1359,8 +1382,17 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                 return () => { mounted = false; if (subscription) subscription.unsubscribe(); };
             }, [fetchProfile]);
 
+            const handleForgotPassword = () => {
+                alert('Şifre sıfırlama için lütfen Telegram botumuz üzerinden destek alın.');
+            };
+
+            const handleRegister = () => {
+                alert('Yeni kayıt için lütfen Telegram botumuz (@ITT_Fis_matik_BOT) üzerinden başvuru yapın.');
+            };
+
             if (profileLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="text-center"><Icon name="loader-2" className="animate-spin h-10 w-10 text-primary mx-auto mb-4" /><p className="text-slate-500">Yükleniyor...</p></div></div>;
-            if (!user) return <Login onLogin={() => { }} />;
+            if (showAbout) return <AboutPage onBack={() => setShowAbout(false)} />;
+            if (!user) return <Login onLogin={() => { }} onForgotPassword={handleForgotPassword} onRegister={handleRegister} onAbout={() => setShowAbout(true)} />;
             if (pendingApproval) {
                 return <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4"><div className="bg-white p-8 rounded-xl shadow-xl max-w-md text-center border-t-4 border-yellow-400">Onay Bekleniyor...</div></div>;
             }
