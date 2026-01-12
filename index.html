@@ -172,16 +172,26 @@
             }
         };
 
-        const ReportTable = ({ title, items, total, profile, dates }) => {
+        const ReportTable = ({ title, items, total, profile, dates, onExcludeDuplicate, onIncludeDuplicate, duplicateDecisions, showMasterColumns }) => {
             const formatMoney = (amount) => {
                 return amount?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
             };
+
+            // Kullanıcı kararına göre filtreleme
+            const filteredItems = items.filter(item => {
+                const decision = duplicateDecisions[item.fis_id];
+                if (decision === 'exclude') return false;
+                return true;
+            });
+
+            const filteredTotal = filteredItems.reduce((sum, item) => sum + (item.toplam_tutar || 0), 0);
+
             return (
                 <div className="report-page mb-8 break-inside-avoid shadow-sm bg-white p-6 rounded-lg border border-slate-100">
                     <div className="border-b-2 border-slate-800 pb-4 mb-4 flex justify-between items-end">
                         <div>
                             <h2 className="text-2xl font-bold text-slate-800">{profile?.company_name || "Şirket Adı"}</h2>
-                            <p className="text-slate-500 text-sm">Harcama Raporu</p>
+                            <p className="text-slate-500 text-sm">Muhasebe Raporu</p>
                         </div>
                         <div className="text-right">
                             <p className="font-bold text-lg">{title}</p>
@@ -200,33 +210,83 @@
                                 <th className="py-2">Tarih</th>
                                 <th className="py-2">Fiş No</th>
                                 <th className="py-2">İşletme</th>
-                                <th className="py-2">Açıklama</th>
                                 <th className="py-2">Kategori</th>
                                 <th className="py-2">Kart Son 4</th>
-                                <th className="py-2 text-right">Tutar</th>
+                                <th className="py-2 text-center">KDV %</th>
+                                <th className="py-2 text-right">Matrah</th>
+                                <th className="py-2 text-right">KDV Tutarı</th>
+                                <th className="py-2 text-right">Toplam</th>
+                                {showMasterColumns && (
+                                    <>
+                                        <th className="py-2">Personel</th>
+                                        <th className="py-2">Proje</th>
+                                    </>
+                                )}
+                                <th className="py-2 text-center">İşlem</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {items.length > 0 ? items.map(item => (
-                                <tr key={item.id}>
-                                    <td className="py-2">{item.tarih ? new Date(item.tarih).toLocaleDateString('tr-TR') : '-'}</td>
-                                    <td className="py-2">{item.fis_no || '-'}</td>
-                                    <td className="py-2 font-medium">{item.isletme_adi}</td>
-                                    <td className="py-2 text-slate-500 truncate max-w-[150px]">
-                                        {item.ocr_detaylari?.map(d => d.aciklama || d.UrunTuru).join(', ')}
+                            {filteredItems.length > 0 ? filteredItems.map((item, idx) => {
+                                const isDuplicate = item.isDuplicate && !duplicateDecisions[item.fis_id];
+                                const isIncluded = duplicateDecisions[item.fis_id] === 'include';
+                                const rowClass = isDuplicate ? 'bg-red-50 border-l-4 border-red-500' : (isIncluded ? 'bg-green-50' : '');
+
+                                return (
+                                    <tr key={`${item.fis_id}-${idx}`} className={rowClass}>
+                                        <td className="py-2">{item.tarih ? new Date(item.tarih).toLocaleDateString('tr-TR') : '-'}</td>
+                                        <td className="py-2">{item.fis_no || '-'}</td>
+                                        <td className="py-2 font-medium">{item.isletme_adi}</td>
+                                        <td className="py-2">{item.kategori}</td>
+                                        <td className="py-2 text-slate-600">{item.kart_son_4 || '-'}</td>
+                                        <td className="py-2 text-center">%{item.kdv_oran}</td>
+                                        <td className="py-2 text-right">{formatMoney(item.matrah)}</td>
+                                        <td className="py-2 text-right text-orange-600">{formatMoney(item.kdv_tutar)}</td>
+                                        <td className="py-2 text-right font-bold">{formatMoney(item.toplam_tutar)}</td>
+                                        {showMasterColumns && (
+                                            <>
+                                                <td className="py-2 text-xs">{item.user_email || '-'}</td>
+                                                <td className="py-2 text-xs">{item.proje || '-'}</td>
+                                            </>
+                                        )}
+                                        <td className="py-2 text-center">
+                                            {isDuplicate ? (
+                                                <div className="flex gap-1 justify-center">
+                                                    <button
+                                                        onClick={() => onExcludeDuplicate(item.fis_id)}
+                                                        className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 flex items-center gap-1"
+                                                        title="Mükerrer olarak işaretle ve rapor dışı bırak"
+                                                    >
+                                                        <Icon name="trash-2" size={12} /> Çıkart
+                                                    </button>
+                                                    <button
+                                                        onClick={() => onIncludeDuplicate(item.fis_id)}
+                                                        className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 flex items-center gap-1"
+                                                        title="Görmezden gel ve rapora dahil et"
+                                                    >
+                                                        <Icon name="check" size={12} /> Dahil Et
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <button className="text-blue-600 hover:text-blue-800" title="Düzenle">
+                                                    <Icon name="pencil" size={14} />
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            }) : (
+                                <tr>
+                                    <td colSpan={showMasterColumns ? "12" : "10"} className="py-10 text-center text-slate-400">
+                                        Bu bölümde listelenecek fiş bulunamadı.
                                     </td>
-                                    <td className="py-2">{item.kategori}</td>
-                                    <td className="py-2 text-slate-600">{item.kart_son_4 || '-'}</td>
-                                    <td className="py-2 text-right font-bold">{formatMoney(item.toplam_tutar)}</td>
                                 </tr>
-                            )) : (
-                                <tr><td colSpan="7" className="py-10 text-center text-slate-400">Bu bölümde listelenecek fiş bulunamadı.</td></tr>
                             )}
                         </tbody>
                         <tfoot className="border-t-2 border-slate-800 font-bold">
                             <tr>
-                                <td colSpan="6" className="py-3 text-right">GENEL TOPLAM:</td>
-                                <td className="py-3 text-right text-lg">{formatMoney(total)}</td>
+                                <td colSpan={showMasterColumns ? "8" : "6"} className="py-3 text-right">GENEL TOPLAM:</td>
+                                <td className="py-3 text-right text-lg">{formatMoney(filteredTotal)}</td>
+                                <td colSpan={showMasterColumns ? "3" : "1"}></td>
                             </tr>
                         </tfoot>
                     </table>
@@ -260,7 +320,7 @@
         };
 
         const callGemini = async (apiKey, prompt) => {
-            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1044,87 +1104,188 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             );
         };
 
-        // --- REPORT PAGE (HTML2PDF) ---
+        // --- REPORT PAGE (HTML2PDF) - ADVANCED ACCOUNTING SYSTEM ---
         const ReportPage = ({ user, profile }) => {
             const [dates, setDates] = useState({ start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] });
             const [loading, setLoading] = useState(false);
             const [reportData, setReportData] = useState(null);
-            const [activeTab, setActiveTab] = useState('all'); // all, cards, projects
+            const [activeTab, setActiveTab] = useState('company-cards'); // company-cards, projects, other, master
             const [companyCards, setCompanyCards] = useState([]);
+            const [duplicateDecisions, setDuplicateDecisions] = useState({});
+            const [potentialDuplicates, setPotentialDuplicates] = useState(new Set());
 
-            // Verileri Çek ve Grupla
+            // Parmak izi oluştur (OCR toleranslı)
+            const createFingerprint = (fis) => {
+                const normalizedBusiness = (fis.isletme_adi || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+                const dateOnly = fis.tarih ? fis.tarih.slice(0, 10) : 'no-date';
+                const roundedAmount = Math.round((fis.toplam_tutar || 0) / 5) * 5;
+                const fisNo = fis.fis_no || '';
+                return `${normalizedBusiness}|${dateOnly}|${roundedAmount}|${fisNo}`;
+            };
+
+            // Kategori + KDV bazlı aggregation
+            const aggregateReceipt = (fis) => {
+                if (!fis.ocr_detaylari || fis.ocr_detaylari.length === 0) {
+                    // OCR detayı yoksa fişi olduğu gibi döndür
+                    const kdvOran = 20; // Varsayılan
+                    const toplam = fis.toplam_tutar || 0;
+                    const matrah = toplam / (1 + kdvOran / 100);
+                    return [{
+                        tarih: fis.tarih,
+                        isletme_adi: fis.isletme_adi,
+                        kategori: fis.kategori || 'Genel',
+                        kart_son_4: fis.kart_son_4,
+                        kdv_oran: kdvOran,
+                        toplam_tutar: toplam,
+                        matrah: matrah,
+                        kdv_tutar: toplam - matrah,
+                        fis_id: fis.id,
+                        fis_no: fis.fis_no,
+                        proje: fis.proje,
+                        user_email: fis.user_email
+                    }];
+                }
+
+                const grouped = {};
+                fis.ocr_detaylari.forEach(item => {
+                    const kategori = item.kategori || 'Genel';
+                    const kdvOran = item.kdv || item.KDVOrani || 20;
+                    const key = `${kategori}|${kdvOran}`;
+
+                    if (!grouped[key]) {
+                        grouped[key] = {
+                            kategori: kategori,
+                            kdv_oran: kdvOran,
+                            toplam_tutar: 0
+                        };
+                    }
+
+                    grouped[key].toplam_tutar += (item.tutar || item.Tutar_KDVDahil || 0);
+                });
+
+                return Object.values(grouped).map(g => {
+                    const matrah = g.toplam_tutar / (1 + g.kdv_oran / 100);
+                    return {
+                        tarih: fis.tarih,
+                        isletme_adi: fis.isletme_adi,
+                        kategori: g.kategori,
+                        kart_son_4: fis.kart_son_4,
+                        kdv_oran: g.kdv_oran,
+                        toplam_tutar: g.toplam_tutar,
+                        matrah: matrah,
+                        kdv_tutar: g.toplam_tutar - matrah,
+                        fis_id: fis.id,
+                        fis_no: fis.fis_no,
+                        proje: fis.proje,
+                        user_email: fis.user_email
+                    };
+                });
+            };
+
+            // Mükerrer fişi çıkart
+            const handleExcludeDuplicate = async (fisId) => {
+                await sb.from('fisler').update({ durum: 'mukerrer' }).eq('id', fisId);
+                setDuplicateDecisions({ ...duplicateDecisions, [fisId]: 'exclude' });
+            };
+
+            // Mükerreri görmezden gel
+            const handleIncludeDuplicate = (fisId) => {
+                setDuplicateDecisions({ ...duplicateDecisions, [fisId]: 'include' });
+            };
+
+            // Rapor oluştur
             const generateReport = async () => {
                 if (!profile?.company_id) return;
                 setLoading(true);
+                setDuplicateDecisions({});
+                setPotentialDuplicates(new Set());
 
                 try {
-                    // 1. Şirket Kartlarını Çek
+                    // 1. Şirket kartlarını çek
                     const { data: cards } = await sb.from('company_cards').select('*').eq('company_id', profile.company_id);
                     setCompanyCards(cards || []);
                     const cardNumbers = new Set((cards || []).map(c => c.last_4_digits));
 
-                    // 2. Fişleri Çek
-                    let query = sb.from('fisler').select('*')
+                    // 2. Fişleri çek
+                    const { data: fisler, error: fetchError } = await sb.from('fisler').select('*')
                         .eq('company_id', profile.company_id)
-                        .in('durum', ['onaylandi', 'beklemede', 'Onaylandı', 'Beklemede']) // Sadece bu durumlar
+                        .in('durum', ['onaylandi', 'beklemede', 'Onaylandı', 'Beklemede'])
                         .gte('tarih', dates.start)
                         .lte('tarih', dates.end + ' 23:59:59')
                         .order('tarih', { ascending: true });
 
-                    const { data: fisler, error: fetchError } = await query;
                     if (fetchError) throw fetchError;
 
-                    if (fisler) {
-                        // --- MÜKERRER KONTROLÜ VE FİLTRELEME ---
-                        const seen = new Map();
-                        const uniqueFisler = [];
-                        const duplicatesToUpdate = [];
-
-                        fisler.forEach(f => {
-                            // Parmak izi: İşletme adı (normalize), Tarih, Net Tutar, Fiş No
-                            const normalizedBusiness = (f.isletme_adi || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-                            const dateStr = f.tarih ? f.tarih.slice(0, 10) : 'no-date';
-                            const fingerprint = `${normalizedBusiness}|${dateStr}|${f.toplam_tutar || 0}|${f.fis_no || ''}`;
-
-                            if (seen.has(fingerprint)) {
-                                duplicatesToUpdate.push(f.id);
-                            } else {
-                                seen.set(fingerprint, true);
-                                uniqueFisler.push(f);
-                            }
-                        });
-
-                        // Mükerrerleri toplu güncelle
-                        if (duplicatesToUpdate.length > 0) {
-                            sb.from('fisler').update({ durum: 'mukerrer' }).in('id', duplicatesToUpdate).then(() => { });
-                        }
-
-                        // GRUPLAMA MANTIĞI
-                        let cardGroups = {};
-                        let projectGroups = {};
-
-                        uniqueFisler.forEach(f => {
-                            const isCC = (f.odeme_tipi === 'Kredi Kartı' || f.odeme_tipi === 'Kredi Karti');
-                            const isCompanyCard = isCC && f.kart_son_4 && cardNumbers.has(f.kart_son_4);
-
-                            if (isCompanyCard) {
-                                const key = f.kart_son_4;
-                                if (!cardGroups[key]) cardGroups[key] = { title: `Kredi Kartı - ${key}`, items: [], total: 0 };
-                                cardGroups[key].items.push(f);
-                                cardGroups[key].total += (f.toplam_tutar || 0);
-                            } else {
-                                const key = (f.proje && f.proje !== "Seçiniz" && f.proje !== "") ? f.proje : "Genel/Belirsiz";
-                                if (!projectGroups[key]) projectGroups[key] = { title: `Proje - ${key}`, items: [], total: 0 };
-                                projectGroups[key].items.push(f);
-                                projectGroups[key].total += (f.toplam_tutar || 0);
-                            }
-                        });
-
-                        setReportData({ cardGroups, projectGroups, allItems: uniqueFisler });
+                    if (!fisler || fisler.length === 0) {
+                        setReportData({ companyCardGroups: {}, projectGroups: {}, otherGroup: [], masterList: [] });
+                        setLoading(false);
+                        return;
                     }
+
+                    // 3. Mükerrerlik tespiti
+                    const fingerprintMap = new Map();
+                    const duplicates = new Set();
+
+                    fisler.forEach(f => {
+                        const fp = createFingerprint(f);
+                        if (fingerprintMap.has(fp)) {
+                            duplicates.add(f.id);
+                        } else {
+                            fingerprintMap.set(fp, f.id);
+                        }
+                    });
+
+                    setPotentialDuplicates(duplicates);
+
+                    // 4. Aggregation ve gruplama
+                    const companyCardGroups = {};
+                    const projectGroups = {};
+                    const otherGroup = [];
+                    const masterList = [];
+
+                    fisler.forEach(fis => {
+                        const aggregatedRows = aggregateReceipt(fis);
+                        const isCC = (fis.odeme_tipi === 'Kredi Kartı' || fis.odeme_tipi === 'Kredi Karti');
+                        const isCompanyCard = isCC && fis.kart_son_4 && cardNumbers.has(fis.kart_son_4);
+
+                        aggregatedRows.forEach(row => {
+                            row.isDuplicate = duplicates.has(fis.id);
+
+                            // Master List'e her şeyi ekle
+                            masterList.push(row);
+
+                            // Grup A: Şirket Kredi Kartları
+                            if (isCompanyCard) {
+                                const key = fis.kart_son_4;
+                                const cardInfo = cards.find(c => c.last_4_digits === key);
+                                const title = `Kredi Kartı - ${key}${cardInfo?.name ? ` (${cardInfo.name})` : ''}`;
+
+                                if (!companyCardGroups[key]) {
+                                    companyCardGroups[key] = { title, items: [], total: 0 };
+                                }
+                                companyCardGroups[key].items.push(row);
+                                companyCardGroups[key].total += row.toplam_tutar;
+                            }
+                            // Grup B: Proje Bazlı
+                            else if (fis.proje && fis.proje !== 'Seçiniz' && fis.proje !== '') {
+                                const key = fis.proje;
+                                if (!projectGroups[key]) {
+                                    projectGroups[key] = { title: `Proje - ${key}`, items: [], total: 0 };
+                                }
+                                projectGroups[key].items.push(row);
+                                projectGroups[key].total += row.toplam_tutar;
+                            }
+                            // Grup C: Projesiz/Diğer
+                            else {
+                                otherGroup.push(row);
+                            }
+                        });
+                    });
+
+                    setReportData({ companyCardGroups, projectGroups, otherGroup, masterList });
                 } catch (e) {
                     console.error(e);
-                    alert("Rapor oluşturulurken hata oluştu.");
+                    alert("Rapor oluşturulurken hata oluştu: " + e.message);
                 } finally {
                     setLoading(false);
                 }
@@ -1142,8 +1303,6 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                 html2pdf().set(opt).from(element).save();
             };
 
-
-
             return (
                 <div className="flex flex-col h-full">
                     {/* Üst Bar */}
@@ -1151,8 +1310,8 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                         <div className="flex gap-4 items-center">
                             <div className="bg-blue-100 p-2 rounded-lg text-primary"><Icon name="file-bar-chart-2" /></div>
                             <div>
-                                <h2 className="font-bold text-slate-800">Rapor Merkezi</h2>
-                                <p className="text-xs text-slate-500">Tarih aralığı seçip raporu görüntüleyin.</p>
+                                <h2 className="font-bold text-slate-800">Gelişmiş Muhasebe Raporu</h2>
+                                <p className="text-xs text-slate-500">Kategori + KDV bazlı detaylı raporlama</p>
                             </div>
                         </div>
                         <div className="flex gap-2">
@@ -1172,30 +1331,34 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                     {/* Rapor İçeriği */}
                     {reportData ? (
                         <div className="flex-1 overflow-auto bg-slate-500/10 p-4 rounded-xl relative">
-
                             {/* Sekmeler */}
                             <div className="flex gap-2 mb-4 sticky top-0 z-10 bg-slate-50/90 backdrop-blur p-2 rounded-lg border">
-                                <button onClick={() => setActiveTab('all')} className={`px-3 py-1 rounded text-sm ${activeTab === 'all' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}`}>Tümünü Göster</button>
-                                <button onClick={() => setActiveTab('cards')} className={`px-3 py-1 rounded text-sm ${activeTab === 'cards' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}`}>Şirket Kartları</button>
-                                <button onClick={() => setActiveTab('projects')} className={`px-3 py-1 rounded text-sm ${activeTab === 'projects' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}`}>Projeler</button>
+                                <button onClick={() => setActiveTab('company-cards')} className={`px-3 py-1 rounded text-sm ${activeTab === 'company-cards' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}`}>Şirket Kartları</button>
+                                <button onClick={() => setActiveTab('projects')} className={`px-3 py-1 rounded text-sm ${activeTab === 'projects' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}`}>Proje Bazlı</button>
+                                <button onClick={() => setActiveTab('other')} className={`px-3 py-1 rounded text-sm ${activeTab === 'other' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}`}>Projesiz/Diğer</button>
+                                <button onClick={() => setActiveTab('master')} className={`px-3 py-1 rounded text-sm ${activeTab === 'master' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}`}>Master List</button>
                             </div>
 
                             {/* Yazdırılacak Alan */}
                             <div id="printable-area">
-                                {/* Kart Raporları */}
-                                {(activeTab === 'all' || activeTab === 'cards') && Object.keys(reportData.cardGroups).map(key => (
+                                {/* Grup A: Şirket Kartları */}
+                                {(activeTab === 'company-cards') && Object.keys(reportData.companyCardGroups).map(key => (
                                     <ReportTable
                                         key={key}
-                                        title={reportData.cardGroups[key].title}
-                                        items={reportData.cardGroups[key].items}
-                                        total={reportData.cardGroups[key].total}
+                                        title={reportData.companyCardGroups[key].title}
+                                        items={reportData.companyCardGroups[key].items}
+                                        total={reportData.companyCardGroups[key].total}
                                         profile={profile}
                                         dates={dates}
+                                        onExcludeDuplicate={handleExcludeDuplicate}
+                                        onIncludeDuplicate={handleIncludeDuplicate}
+                                        duplicateDecisions={duplicateDecisions}
+                                        showMasterColumns={false}
                                     />
                                 ))}
 
-                                {/* Proje Raporları */}
-                                {(activeTab === 'all' || activeTab === 'projects') && Object.keys(reportData.projectGroups).map(key => (
+                                {/* Grup B: Proje Bazlı */}
+                                {(activeTab === 'projects') && Object.keys(reportData.projectGroups).map(key => (
                                     <ReportTable
                                         key={key}
                                         title={reportData.projectGroups[key].title}
@@ -1203,79 +1366,103 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                         total={reportData.projectGroups[key].total}
                                         profile={profile}
                                         dates={dates}
+                                        onExcludeDuplicate={handleExcludeDuplicate}
+                                        onIncludeDuplicate={handleIncludeDuplicate}
+                                        duplicateDecisions={duplicateDecisions}
+                                        showMasterColumns={false}
                                     />
                                 ))}
 
-                                {/* Genel Liste */}
-                                {activeTab === 'all' && (
+                                {/* Grup C: Projesiz/Diğer */}
+                                {(activeTab === 'other') && (
                                     <ReportTable
-                                        title="GENEL DÖKÜM LİSTESİ"
-                                        items={reportData.allItems}
-                                        total={reportData.allItems.reduce((a, b) => a + (b.toplam_tutar || 0), 0)}
+                                        title="Genel / Proje Belirtilmemiş"
+                                        items={reportData.otherGroup}
+                                        total={reportData.otherGroup.reduce((a, b) => a + b.toplam_tutar, 0)}
                                         profile={profile}
                                         dates={dates}
+                                        onExcludeDuplicate={handleExcludeDuplicate}
+                                        onIncludeDuplicate={handleIncludeDuplicate}
+                                        duplicateDecisions={duplicateDecisions}
+                                        showMasterColumns={false}
+                                    />
+                                )}
+
+                                {/* Grup D: Master List */}
+                                {(activeTab === 'master') && (
+                                    <ReportTable
+                                        title="GENEL YÖNETİM LİSTESİ (MASTER LIST)"
+                                        items={reportData.masterList}
+                                        total={reportData.masterList.reduce((a, b) => a + b.toplam_tutar, 0)}
+                                        profile={profile}
+                                        dates={dates}
+                                        onExcludeDuplicate={handleExcludeDuplicate}
+                                        onIncludeDuplicate={handleIncludeDuplicate}
+                                        duplicateDecisions={duplicateDecisions}
+                                        showMasterColumns={true}
                                     />
                                 )}
                             </div>
 
                         </div>
                     ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
-                            <Icon name="file-search" size={48} className="mb-4 opacity-50" />
-                            <p>Rapor oluşturmak için tarih seçip "Getir" butonuna basın.</p>
+                        <div className="flex-1 flex items-center justify-center text-slate-400">
+                            <div className="text-center">
+                                <Icon name="file-bar-chart-2" size={48} className="mx-auto mb-4 opacity-50" />
+                                <p>Tarih aralığı seçip "Getir" butonuna basın.</p>
+                            </div>
                         </div>
                     )}
                 </div>
             );
-        };
 
-        const Dashboard = ({ user, profile, supabase, onLogout }) => {
-            const [view, setView] = useState('dashboard');
-            const [receipts, setReceipts] = useState([]);
-            const [loading, setLoading] = useState(true);
-            const [stats, setStats] = useState({ total: 0, count: 0, pending: 0 });
-            const [aiAnalysis, setAiAnalysis] = useState(null);
-            const [aiLoading, setAiLoading] = useState(false);
+            const Dashboard = ({ user, profile, supabase, onLogout }) => {
+                const [view, setView] = useState('dashboard');
+                const [receipts, setReceipts] = useState([]);
+                const [loading, setLoading] = useState(true);
+                const [stats, setStats] = useState({ total: 0, count: 0, pending: 0 });
+                const [aiAnalysis, setAiAnalysis] = useState(null);
+                const [aiLoading, setAiLoading] = useState(false);
 
-            const fetchData = useCallback(async () => {
-                if (!user?.id) { setLoading(false); return; }
-                setLoading(true);
-                try {
-                    let q = sb.from('fisler').select('*').order('tarih', { ascending: false });
-                    if (profile?.company_id) { q = q.eq('company_id', profile.company_id); }
-                    else { q = q.eq('user_id', user.id); }
-                    const { data, error } = await q;
-                    if (!error) {
-                        setReceipts(data || []);
-                        const total = (data || []).reduce((a, b) => a + (b.toplam_tutar || 0), 0);
-                        const pending = (data || []).filter(r => r.durum === 'beklemede').length;
-                        setStats({ total, count: (data || []).length, pending });
-                    } else { setReceipts([]); }
-                } catch (e) { setReceipts([]); }
-                finally { setLoading(false); }
-            }, [user?.id, profile?.company_id]);
+                const fetchData = useCallback(async () => {
+                    if (!user?.id) { setLoading(false); return; }
+                    setLoading(true);
+                    try {
+                        let q = sb.from('fisler').select('*').order('tarih', { ascending: false });
+                        if (profile?.company_id) { q = q.eq('company_id', profile.company_id); }
+                        else { q = q.eq('user_id', user.id); }
+                        const { data, error } = await q;
+                        if (!error) {
+                            setReceipts(data || []);
+                            const total = (data || []).reduce((a, b) => a + (b.toplam_tutar || 0), 0);
+                            const pending = (data || []).filter(r => r.durum === 'beklemede').length;
+                            setStats({ total, count: (data || []).length, pending });
+                        } else { setReceipts([]); }
+                    } catch (e) { setReceipts([]); }
+                    finally { setLoading(false); }
+                }, [user?.id, profile?.company_id]);
 
-            const handleLocalUpdate = (updatedItem) => {
-                setReceipts(prev => prev.map(r => r.id === updatedItem.id ? updatedItem : r));
-            };
+                const handleLocalUpdate = (updatedItem) => {
+                    setReceipts(prev => prev.map(r => r.id === updatedItem.id ? updatedItem : r));
+                };
 
-            const runAiAnalysis = async () => {
-                const apiKey = localStorage.getItem('fismatik_gemini_key');
-                if (!apiKey) {
-                    alert("Yapay zeka analizini kullanabilmek için Ayarlar sayfasından Gemini API anahtarınızı tanımlamanız gerekmektedir.");
-                    return;
-                }
+                const runAiAnalysis = async () => {
+                    const apiKey = localStorage.getItem('fismatik_gemini_key');
+                    if (!apiKey) {
+                        alert("Yapay zeka analizini kullanabilmek için Ayarlar sayfasından Gemini API anahtarınızı tanımlamanız gerekmektedir.");
+                        return;
+                    }
 
-                setAiLoading(true);
-                setAiAnalysis(null);
+                    setAiLoading(true);
+                    setAiAnalysis(null);
 
-                try {
-                    const recentReceipts = receipts.slice(0, 20);
-                    const receiptsSummary = recentReceipts.map(r =>
-                        `- Tarih: ${r.tarih}, İşletme: ${r.isletme_adi}, Tutar: ${r.toplam_tutar} TL, Kategori: ${r.kategori}`
-                    ).join('\n');
+                    try {
+                        const recentReceipts = receipts.slice(0, 20);
+                        const receiptsSummary = recentReceipts.map(r =>
+                            `- Tarih: ${r.tarih}, İşletme: ${r.isletme_adi}, Tutar: ${r.toplam_tutar} TL, Kategori: ${r.kategori}`
+                        ).join('\n');
 
-                    const prompt = `Aşağıdaki son harcama fişi verilerini analiz et ve bana şunları içeren kısa bir özet rapor sun:
+                        const prompt = `Aşağıdaki son harcama fişi verilerini analiz et ve bana şunları içeren kısa bir özet rapor sun:
                     1. Harcamalarımın genel özeti.
                     2. En çok hangi kategoride harcama yapılmış?
                     3. Tasarruf için 3 spesifik öneri.
@@ -1286,148 +1473,148 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                     Veriler:
                     ${receiptsSummary}`;
 
-                    const result = await callGemini(apiKey, prompt);
-                    setAiAnalysis(result);
-                } catch (err) {
-                    console.error("AI Analiz Hatası:", err);
-                    alert("Analiz sırasında bir hata oluştu: " + err.message);
-                } finally {
-                    setAiLoading(false);
-                }
-            };
-
-            useEffect(() => { fetchData(); }, [fetchData]);
-            useEffect(() => { /* İkonlar artık otomatik render ediliyor */ }, [view, receipts]);
-
-            return (
-                <div className="min-h-screen flex flex-col md:flex-row">
-                    <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col z-20">
-                        <div className="p-6 flex items-center gap-2 border-b border-slate-100"><Icon name="receipt" className="text-primary" /><span className="font-bold text-lg text-slate-800">FişMatik</span></div>
-                        <nav className="flex-1 p-4 space-y-1">
-                            {['dashboard', 'receipts', 'reports', 'team', 'settings', 'about'].map(v => {
-                                if (v === 'team' && profile?.role !== 'admin') return null;
-                                return (<button key={v} onClick={() => setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view === v ? 'bg-blue-50 text-primary' : 'text-slate-600 hover:bg-slate-50'}`}><Icon name={v === 'dashboard' ? 'layout-dashboard' : v === 'receipts' ? 'file-text' : v === 'reports' ? 'bar-chart-3' : v === 'team' ? 'users' : v === 'settings' ? 'settings' : 'info'} size={18} /> {v === 'dashboard' ? 'Genel Bakış' : v === 'receipts' ? 'Fişlerim' : v === 'reports' ? 'Raporlar' : v === 'team' ? 'Ekip Yönetimi' : v === 'settings' ? 'Ayarlar' : 'Hakkında'}</button>)
-                            })}
-                        </nav>
-                        <div className="p-4 border-t"><div className="mb-4 text-xs text-slate-500"><p className="font-bold text-slate-800 truncate">{profile?.full_name || user.email}</p><p>Rol: {profile?.role || 'User'}</p></div><button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16} /> Çıkış</button></div>
-                    </aside>
-                    <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen bg-slate-50">
-                        {view === 'dashboard' && (
-                            <div className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><StatCard title="Toplam Harcama" value={stats.total.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })} icon="wallet" color="text-green-600" bg="bg-green-50" /><StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50" /><StatCard title="Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50" /></div>
-                                <div className="bg-white p-6 rounded border shadow-sm"><h3 className="font-bold mb-4">Son Hareketler</h3><ReceiptsTable receipts={receipts.slice(0, 5)} loading={loading} simple={true} profile={profile} /></div>
-
-                                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-hidden relative group">
-                                    <div className="flex justify-between items-center mb-6 border-b pb-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-purple-100 text-purple-600 rounded-lg"><Icon name="sparkles" size={20} /></div>
-                                            <div>
-                                                <h3 className="font-bold text-slate-800">Yapay Zeka Harcama Analizi</h3>
-                                                <p className="text-xs text-slate-500">Google Gemini ile harcamalarınızı optimize edin.</p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={runAiAnalysis}
-                                            disabled={aiLoading || receipts.length === 0}
-                                            className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 transition flex items-center gap-2 disabled:opacity-50"
-                                        >
-                                            {aiLoading ? <Icon name="loader-2" className="animate-spin" size={18} /> : <Icon name="zap" size={18} />}
-                                            Analizi Başlat
-                                        </button>
-                                    </div>
-
-                                    {aiLoading && (
-                                        <div className="py-12 flex flex-col items-center justify-center text-slate-400 animate-pulse">
-                                            <Icon name="brain-circuit" size={48} className="mb-4 text-purple-300" />
-                                            <p>Yapay zeka verileri inceliyor ve strateji oluşturuyor...</p>
-                                        </div>
-                                    )}
-
-                                    {aiAnalysis && (
-                                        <div className="bg-slate-50 p-6 rounded-xl border border-purple-100 prose prose-slate max-w-none animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                            <div dangerouslySetInnerHTML={{ __html: marked.parse(aiAnalysis) }} className="markdown-body" />
-                                        </div>
-                                    )}
-
-                                    {!aiAnalysis && !aiLoading && (
-                                        <div className="py-8 text-center border-2 border-dashed border-slate-100 rounded-xl">
-                                            <p className="text-slate-400 text-sm">Hala analiz yapılmadı. "Analizi Başlat" butonuna tıklayarak ilk raporunuzu alın.</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                        {view === 'receipts' && <div className="bg-white rounded border shadow-sm p-4 h-full flex flex-col"><div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Fiş Kayıtları</h2><button onClick={fetchData}><Icon name="refresh-ccw" /></button></div><ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData} onLocalUpdate={handleLocalUpdate} userRole={profile?.role} profile={profile} /></div>}
-
-                        {/* YENİ RAPOR SAYFASI BURADA ÇAĞRILIYOR */}
-                        {view === 'reports' && <ReportPage user={user} profile={profile} />}
-
-                        {view === 'team' && <div className="max-w-4xl mx-auto mt-5"><TeamManagement user={user} profile={profile} /></div>}
-                        {view === 'settings' && <Settings user={user} profile={profile} />}
-                        {view === 'about' && <div className="max-w-3xl mx-auto bg-white p-8 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in duration-300"><div className="text-center mb-8 border-b border-slate-100 pb-6"><h2 className="text-2xl font-bold text-slate-800">Hakkımızda</h2></div><AboutContent /></div>}
-                    </main>
-                </div>
-            );
-        };
-
-        const App = () => {
-            const [user, setUser] = useState(null);
-            const [profile, setProfile] = useState(null);
-            const [pendingApproval, setPendingApproval] = useState(false);
-            const [profileLoading, setProfileLoading] = useState(true);
-            const [showAbout, setShowAbout] = useState(false);
-
-            const fetchProfile = useCallback(async (u) => {
-                if (!u?.id) return;
-                setProfileLoading(true);
-                try {
-                    let { data, error } = await sb.from('users').select('*').eq('id', u.id).limit(1);
-                    if (error || !data || data.length === 0) {
-                        const res = await sb.from('users').select('*').eq('email', u.email).limit(1);
-                        if (res.data && res.data.length > 0) data = res.data;
+                        const result = await callGemini(apiKey, prompt);
+                        setAiAnalysis(result);
+                    } catch (err) {
+                        console.error("AI Analiz Hatası:", err);
+                        alert("Analiz sırasında bir hata oluştu: " + err.message);
+                    } finally {
+                        setAiLoading(false);
                     }
-                    if (data && data.length > 0) {
-                        const userProfile = data[0];
-                        if (userProfile.status === 'pending' || userProfile.status === 'beklemede') { setPendingApproval(true); setProfile(userProfile); }
-                        else { setPendingApproval(false); setProfile(userProfile); }
-                    } else { setProfile(null); }
-                } catch (e) { setProfile(null); }
-                finally { setProfileLoading(false); }
-            }, []);
+                };
 
-            useEffect(() => {
-                let mounted = true;
-                sb.auth.getUser().then(({ data }) => {
-                    if (mounted && data?.user) { setUser(data.user); fetchProfile(data.user); }
-                    else { setProfileLoading(false); }
-                });
-                const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => {
-                    if (!mounted) return;
-                    if (session?.user) { setUser(session.user); fetchProfile(session.user); }
-                    else { setUser(null); setProfile(null); setPendingApproval(false); setProfileLoading(false); }
-                });
-                return () => { mounted = false; if (subscription) subscription.unsubscribe(); };
-            }, [fetchProfile]);
+                useEffect(() => { fetchData(); }, [fetchData]);
+                useEffect(() => { /* İkonlar artık otomatik render ediliyor */ }, [view, receipts]);
 
-            const handleForgotPassword = () => {
-                alert('Şifre sıfırlama için lütfen Telegram botumuz üzerinden destek alın.');
+                return (
+                    <div className="min-h-screen flex flex-col md:flex-row">
+                        <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col z-20">
+                            <div className="p-6 flex items-center gap-2 border-b border-slate-100"><Icon name="receipt" className="text-primary" /><span className="font-bold text-lg text-slate-800">FişMatik</span></div>
+                            <nav className="flex-1 p-4 space-y-1">
+                                {['dashboard', 'receipts', 'reports', 'team', 'settings', 'about'].map(v => {
+                                    if (v === 'team' && profile?.role !== 'admin') return null;
+                                    return (<button key={v} onClick={() => setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view === v ? 'bg-blue-50 text-primary' : 'text-slate-600 hover:bg-slate-50'}`}><Icon name={v === 'dashboard' ? 'layout-dashboard' : v === 'receipts' ? 'file-text' : v === 'reports' ? 'bar-chart-3' : v === 'team' ? 'users' : v === 'settings' ? 'settings' : 'info'} size={18} /> {v === 'dashboard' ? 'Genel Bakış' : v === 'receipts' ? 'Fişlerim' : v === 'reports' ? 'Raporlar' : v === 'team' ? 'Ekip Yönetimi' : v === 'settings' ? 'Ayarlar' : 'Hakkında'}</button>)
+                                })}
+                            </nav>
+                            <div className="p-4 border-t"><div className="mb-4 text-xs text-slate-500"><p className="font-bold text-slate-800 truncate">{profile?.full_name || user.email}</p><p>Rol: {profile?.role || 'User'}</p></div><button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16} /> Çıkış</button></div>
+                        </aside>
+                        <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen bg-slate-50">
+                            {view === 'dashboard' && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><StatCard title="Toplam Harcama" value={stats.total.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })} icon="wallet" color="text-green-600" bg="bg-green-50" /><StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50" /><StatCard title="Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50" /></div>
+                                    <div className="bg-white p-6 rounded border shadow-sm"><h3 className="font-bold mb-4">Son Hareketler</h3><ReceiptsTable receipts={receipts.slice(0, 5)} loading={loading} simple={true} profile={profile} /></div>
+
+                                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-hidden relative group">
+                                        <div className="flex justify-between items-center mb-6 border-b pb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-purple-100 text-purple-600 rounded-lg"><Icon name="sparkles" size={20} /></div>
+                                                <div>
+                                                    <h3 className="font-bold text-slate-800">Yapay Zeka Harcama Analizi</h3>
+                                                    <p className="text-xs text-slate-500">Google Gemini ile harcamalarınızı optimize edin.</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={runAiAnalysis}
+                                                disabled={aiLoading || receipts.length === 0}
+                                                className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 transition flex items-center gap-2 disabled:opacity-50"
+                                            >
+                                                {aiLoading ? <Icon name="loader-2" className="animate-spin" size={18} /> : <Icon name="zap" size={18} />}
+                                                Analizi Başlat
+                                            </button>
+                                        </div>
+
+                                        {aiLoading && (
+                                            <div className="py-12 flex flex-col items-center justify-center text-slate-400 animate-pulse">
+                                                <Icon name="brain-circuit" size={48} className="mb-4 text-purple-300" />
+                                                <p>Yapay zeka verileri inceliyor ve strateji oluşturuyor...</p>
+                                            </div>
+                                        )}
+
+                                        {aiAnalysis && (
+                                            <div className="bg-slate-50 p-6 rounded-xl border border-purple-100 prose prose-slate max-w-none animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                                <div dangerouslySetInnerHTML={{ __html: marked.parse(aiAnalysis) }} className="markdown-body" />
+                                            </div>
+                                        )}
+
+                                        {!aiAnalysis && !aiLoading && (
+                                            <div className="py-8 text-center border-2 border-dashed border-slate-100 rounded-xl">
+                                                <p className="text-slate-400 text-sm">Hala analiz yapılmadı. "Analizi Başlat" butonuna tıklayarak ilk raporunuzu alın.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            {view === 'receipts' && <div className="bg-white rounded border shadow-sm p-4 h-full flex flex-col"><div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Fiş Kayıtları</h2><button onClick={fetchData}><Icon name="refresh-ccw" /></button></div><ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData} onLocalUpdate={handleLocalUpdate} userRole={profile?.role} profile={profile} /></div>}
+
+                            {/* YENİ RAPOR SAYFASI BURADA ÇAĞRILIYOR */}
+                            {view === 'reports' && <ReportPage user={user} profile={profile} />}
+
+                            {view === 'team' && <div className="max-w-4xl mx-auto mt-5"><TeamManagement user={user} profile={profile} /></div>}
+                            {view === 'settings' && <Settings user={user} profile={profile} />}
+                            {view === 'about' && <div className="max-w-3xl mx-auto bg-white p-8 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in duration-300"><div className="text-center mb-8 border-b border-slate-100 pb-6"><h2 className="text-2xl font-bold text-slate-800">Hakkımızda</h2></div><AboutContent /></div>}
+                        </main>
+                    </div>
+                );
             };
 
-            const handleRegister = () => {
-                alert('Yeni kayıt için lütfen Telegram botumuz (@ITT_Fis_matik_BOT) üzerinden başvuru yapın.');
+            const App = () => {
+                const [user, setUser] = useState(null);
+                const [profile, setProfile] = useState(null);
+                const [pendingApproval, setPendingApproval] = useState(false);
+                const [profileLoading, setProfileLoading] = useState(true);
+                const [showAbout, setShowAbout] = useState(false);
+
+                const fetchProfile = useCallback(async (u) => {
+                    if (!u?.id) return;
+                    setProfileLoading(true);
+                    try {
+                        let { data, error } = await sb.from('users').select('*').eq('id', u.id).limit(1);
+                        if (error || !data || data.length === 0) {
+                            const res = await sb.from('users').select('*').eq('email', u.email).limit(1);
+                            if (res.data && res.data.length > 0) data = res.data;
+                        }
+                        if (data && data.length > 0) {
+                            const userProfile = data[0];
+                            if (userProfile.status === 'pending' || userProfile.status === 'beklemede') { setPendingApproval(true); setProfile(userProfile); }
+                            else { setPendingApproval(false); setProfile(userProfile); }
+                        } else { setProfile(null); }
+                    } catch (e) { setProfile(null); }
+                    finally { setProfileLoading(false); }
+                }, []);
+
+                useEffect(() => {
+                    let mounted = true;
+                    sb.auth.getUser().then(({ data }) => {
+                        if (mounted && data?.user) { setUser(data.user); fetchProfile(data.user); }
+                        else { setProfileLoading(false); }
+                    });
+                    const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => {
+                        if (!mounted) return;
+                        if (session?.user) { setUser(session.user); fetchProfile(session.user); }
+                        else { setUser(null); setProfile(null); setPendingApproval(false); setProfileLoading(false); }
+                    });
+                    return () => { mounted = false; if (subscription) subscription.unsubscribe(); };
+                }, [fetchProfile]);
+
+                const handleForgotPassword = () => {
+                    alert('Şifre sıfırlama için lütfen Telegram botumuz üzerinden destek alın.');
+                };
+
+                const handleRegister = () => {
+                    alert('Yeni kayıt için lütfen Telegram botumuz (@ITT_Fis_matik_BOT) üzerinden başvuru yapın.');
+                };
+
+                if (profileLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="text-center"><Icon name="loader-2" className="animate-spin h-10 w-10 text-primary mx-auto mb-4" /><p className="text-slate-500">Yükleniyor...</p></div></div>;
+                if (showAbout) return <AboutPage onBack={() => setShowAbout(false)} />;
+                if (!user) return <Login onLogin={() => { }} onForgotPassword={handleForgotPassword} onRegister={handleRegister} onAbout={() => setShowAbout(true)} />;
+                if (pendingApproval) {
+                    return <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4"><div className="bg-white p-8 rounded-xl shadow-xl max-w-md text-center border-t-4 border-yellow-400">Onay Bekleniyor...</div></div>;
+                }
+                return <Dashboard user={user} profile={profile} onLogout={() => sb.auth.signOut()} supabase={sb} />;
             };
 
-            if (profileLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="text-center"><Icon name="loader-2" className="animate-spin h-10 w-10 text-primary mx-auto mb-4" /><p className="text-slate-500">Yükleniyor...</p></div></div>;
-            if (showAbout) return <AboutPage onBack={() => setShowAbout(false)} />;
-            if (!user) return <Login onLogin={() => { }} onForgotPassword={handleForgotPassword} onRegister={handleRegister} onAbout={() => setShowAbout(true)} />;
-            if (pendingApproval) {
-                return <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4"><div className="bg-white p-8 rounded-xl shadow-xl max-w-md text-center border-t-4 border-yellow-400">Onay Bekleniyor...</div></div>;
-            }
-            return <Dashboard user={user} profile={profile} onLogout={() => sb.auth.signOut()} supabase={sb} />;
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(<App />);
     </script>
 </body>
 
