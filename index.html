@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FişMatik - Akıllı Müşteri Paneli</title>
-    
+
     <!-- GEREKLİ KÜTÜPHANELER (CDN) -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -13,6 +14,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- PDF Oluşturucu -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
@@ -22,7 +25,7 @@
                 extend: {
                     fontFamily: { sans: ['Inter', 'sans-serif'] },
                     colors: {
-                        primary: '#2563eb', 
+                        primary: '#2563eb',
                         secondary: '#1e293b',
                         ai: '#8b5cf6',
                     }
@@ -31,21 +34,85 @@
         }
     </script>
     <style>
-        body { background-color: #f8fafc; }
-        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid #e2e8f0; }
-        .loading-spin { animation: spin 1s linear infinite; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .ai-glow { box-shadow: 0 0 15px rgba(139, 92, 246, 0.3); }
-        .markdown-body ul { list-style-type: disc; margin-left: 1.5rem; margin-top: 0.5rem; }
-        .markdown-body strong { color: #4b5563; font-weight: 700; }
-        .markdown-body p { margin-bottom: 0.75rem; }
-        .image-container { transition: transform 0.2s ease-out; }
+        body {
+            background-color: #f8fafc;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid #e2e8f0;
+        }
+
+        .loading-spin {
+            animation: spin 1s linear infinite;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .ai-glow {
+            box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
+        }
+
+        .markdown-body ul {
+            list-style-type: disc;
+            margin-left: 1.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .markdown-body strong {
+            color: #4b5563;
+            font-weight: 700;
+        }
+
+        .markdown-body p {
+            margin-bottom: 0.75rem;
+        }
+
+        .image-container {
+            transition: transform 0.2s ease-out;
+        }
+
+        /* Rapor Yazdırma Stilleri */
+        .report-page {
+            background: white;
+            padding: 40px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            max-width: 210mm;
+            /* A4 Genişliği */
+            margin-left: auto;
+            margin-right: auto;
+        }
     </style>
 </head>
+
 <body>
     <div id="root"></div>
 
@@ -56,23 +123,33 @@
         // --- AYARLAR ---
         const DEFAULT_SB_URL = "https://hequoxateionmtfjzkxl.supabase.co";
         const DEFAULT_SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlcXVveGF0ZWlvbm10Zmp6a3hsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTg5MDAsImV4cCI6MjA4MDgzNDkwMH0.aIiIdWw2l7Kcqa4BavNJQ8ARZrdPnmxD8qSMpTlXYhA";
-        
-        const N8N_REPORT_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/fismatik";
-        const N8N_REPORT_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/fismatik";
-        const N8N_RESET_PW_WEBHOOK_TEST = "https://n8n.ittyazilim.com/webhook-test/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
-        const N8N_RESET_PW_WEBHOOK_PROD = "https://n8n.ittyazilim.com/webhook/3eafd39c-fdee-406f-88ef-1b9ab4bd555e";
-        const N8N_REGISTER_URLS = { TEST: "https://n8n.ittyazilim.com/webhook-test/030dfb1b-49f9-4dc8-82e3-98b884f3065c", PROD: "https://n8n.ittyazilim.com/webhook/030dfb1b-49f9-4dc8-82e3-98b884f3065c" };
-        const N8N_ADD_USER_URLS = { TEST: "https://n8n.ittyazilim.com/webhook-test/alt-kullanici-ekle", PROD: "https://n8n.ittyazilim.com/webhook/alt-kullanici-ekle" };
-        const N8N_DELETE_USER_URLS = { TEST: "https://n8n.ittyazilim.com/webhook-test/kullanici-sil", PROD: "https://n8n.ittyazilim.com/webhook/kullanici-sil" };
+
+        const WEBHOOKS = {
+            REPORT: { TEST: "https://n8n.ittyazilim.com/webhook-test/fismatik", PROD: "https://n8n.ittyazilim.com/webhook/fismatik" },
+            RESET_PW: { TEST: "https://n8n.ittyazilim.com/webhook-test/3eafd39c-fdee-406f-88ef-1b9ab4bd555e", PROD: "https://n8n.ittyazilim.com/webhook/3eafd39c-fdee-406f-88ef-1b9ab4bd555e" },
+            REGISTER: { TEST: "https://n8n.ittyazilim.com/webhook-test/030dfb1b-49f9-4dc8-82e3-98b884f3065c", PROD: "https://n8n.ittyazilim.com/webhook/030dfb1b-49f9-4dc8-82e3-98b884f3065c" },
+            ADD_USER: { TEST: "https://n8n.ittyazilim.com/webhook-test/alt-kullanici-ekle", PROD: "https://n8n.ittyazilim.com/webhook/alt-kullanici-ekle" },
+            DELETE_USER: { TEST: "https://n8n.ittyazilim.com/webhook-test/kullanici-sil", PROD: "https://n8n.ittyazilim.com/webhook/kullanici-sil" }
+        };
 
         const sb = createClient(DEFAULT_SB_URL, DEFAULT_SB_KEY);
 
         const Icon = ({ name, size = 20, className }) => {
-            return <i data-lucide={name} width={size} height={size} className={className}></i>;
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        };
+
+        // --- YARDIMCI FONKSİYONLAR ---
+        const normalizePhone = (phone) => {
+            if (!phone) return "";
+            let clean = phone.replace(/\D/g, '');
+            if (clean.startsWith('0')) clean = clean.substring(1);
+            if (clean.startsWith('90') && clean.length > 10) clean = clean.substring(2);
+            if (clean.length === 10) return "+90" + clean;
+            return "+" + clean;
         };
 
         const callGemini = async (apiKey, prompt) => {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -83,17 +160,167 @@
             return data.candidates?.[0]?.content?.parts?.[0]?.text || "Yanıt alınamadı.";
         };
 
-        const normalizePhone = (phone) => {
-            if (!phone) return "";
-            let clean = phone.replace(/\D/g, ''); 
-            if (clean.startsWith('0')) clean = clean.substring(1);
-            if (clean.startsWith('90') && clean.length > 10) clean = clean.substring(2);
-            if (clean.length === 10) return "+90" + clean;
-            return "+" + clean;
+        // --- BİLEŞENLER ---
+        // --- LOGIN BİLEŞENİ ---
+        const Login = ({ onLogin }) => {
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                setError(null);
+                try {
+                    const { data, error: authError } = await sb.auth.signInWithPassword({ email, password });
+                    if (authError) throw authError;
+                    onLogin(data.user);
+                } catch (err) {
+                    setError(err.message === "Invalid login credentials" ? "E-posta veya şifre hatalı." : err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+                    <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-300">
+                        <div className="bg-primary p-8 text-center text-white">
+                            <div className="flex justify-center mb-4">
+                                <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm">
+                                    <Icon name="receipt" size={40} />
+                                </div>
+                            </div>
+                            <h1 className="text-2xl font-bold">FişMatik</h1>
+                            <p className="text-blue-100 mt-2">Akıllı Müşteri Paneli Girişi</p>
+                        </div>
+                        <form onSubmit={handleLogin} className="p-8 space-y-5">
+                            {error && (
+                                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-100 flex items-center gap-2">
+                                    <Icon name="alert-circle" size={16} /> {error}
+                                </div>
+                            )}
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium text-slate-700">E-Posta</label>
+                                <div className="relative">
+                                    <Icon name="mail" size={18} className="absolute left-3 top-3 text-slate-400" />
+                                    <input
+                                        type="email"
+                                        required
+                                        className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
+                                        placeholder="admin@sirket.com"
+                                        value={email}
+                                        onChange={e => setEmail(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium text-slate-700">Şifre</label>
+                                <div className="relative">
+                                    <Icon name="lock" size={18} className="absolute left-3 top-3 text-slate-400" />
+                                    <input
+                                        type="password"
+                                        required
+                                        className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
+                                        placeholder="••••••••"
+                                        value={password}
+                                        onChange={e => setPassword(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full bg-primary text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {loading ? <Icon name="loader-2" className="animate-spin" size={20} /> : "Giriş Yap"}
+                            </button>
+                        </form>
+                        <div className="p-6 bg-slate-50 text-center border-t border-slate-100">
+                            <p className="text-xs text-slate-500">2025 İTT Yazılım &copy; Tüm hakları saklıdır.</p>
+                        </div>
+                    </div>
+                </div>
+            );
         };
 
-        // --- BİLEŞENLER ---
-        
+        // --- SETTINGS BİLEŞENİ ---
+        const Settings = ({ user, profile }) => {
+            const [geminiKey, setGeminiKey] = useState(localStorage.getItem('fismatik_gemini_key') || '');
+            const [isSaved, setIsSaved] = useState(false);
+
+            const saveGeminiKey = () => {
+                localStorage.setItem('fismatik_gemini_key', geminiKey);
+                setIsSaved(true);
+                setTimeout(() => setIsSaved(false), 2000);
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto py-8">
+                    <h2 className="text-2xl font-bold text-slate-800 mb-8 border-b pb-4">Hesap ve Uygulama Ayarları</h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                            <div className="flex items-center gap-2 mb-4 text-slate-800 border-b pb-2">
+                                <Icon name="user" size={20} className="text-primary" /> <h3 className="font-bold">Profil Bilgileri</h3>
+                            </div>
+                            <div className="space-y-4">
+                                <div><p className="text-xs text-slate-500">Ad Soyad</p><p className="font-medium">{profile?.full_name || '-'}</p></div>
+                                <div><p className="text-xs text-slate-500">E-Posta</p><p className="font-medium">{user?.email}</p></div>
+                                <div><p className="text-xs text-slate-500">Yetki Seviyesi</p><span className={`inline-block px-2 py-1 rounded text-xs mt-1 ${profile?.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{profile?.role === 'admin' ? 'Yönetici' : 'Personel'}</span></div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                            <div className="flex items-center gap-2 mb-4 text-slate-800 border-b pb-2">
+                                <Icon name="sparkles" size={20} className="text-ai" /> <h3 className="font-bold">Yapay Zeka (Gemini)</h3>
+                            </div>
+                            <div className="space-y-4">
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    Harcama analizleri ve tasarruf önerileri almak için Google AI Studio'dan aldığınız API anahtarını buraya girin.
+                                </p>
+                                <div className="space-y-2">
+                                    <input
+                                        type="password"
+                                        placeholder="AI_STUDIO_API_KEY"
+                                        className="w-full p-2 border rounded text-sm"
+                                        value={geminiKey}
+                                        onChange={e => setGeminiKey(e.target.value)}
+                                    />
+                                    <button
+                                        onClick={saveGeminiKey}
+                                        className="w-full bg-slate-800 text-white py-2 rounded text-sm hover:bg-slate-900 transition flex items-center justify-center gap-2"
+                                    >
+                                        <Icon name={isSaved ? "check" : "save"} size={16} /> {isSaved ? "Kaydedildi" : "Kaydet"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
+                        <DatabaseFix />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <MetadataSettings companyId={profile?.company_id} type="categories" title="Kategoriler" icon="tag" />
+                            <MetadataSettings companyId={profile?.company_id} type="projects" title="Projeler" icon="folder" />
+                        </div>
+                        <MetadataSettings companyId={profile?.company_id} type="company_cards" title="Şirket Kredi Kartları" icon="credit-card" />
+                    </div>
+                </div>
+            );
+        };
+
+        // Not: Bileşenler "Bağımlılık Sırasına" göre dizilmiştir. 
+        // Login bileşeni App'ten önce tanımlanmalıdır.
+
+        const StatCard = ({ title, value, icon, color, bg }) => (
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div className={`p-4 rounded-full ${bg} ${color}`}><Icon name={icon} size={24} /></div>
+                <div><p className="text-slate-500 text-sm font-medium">{title}</p><p className="text-2xl font-bold text-slate-800">{value}</p></div>
+            </div>
+        );
+
         const DatabaseFix = () => {
             const sql = `-- BU KODU SUPABASE > SQL EDITOR EKRANINA YAPIŞTIRIN VE ÇALIŞTIRIN (RUN)
 
@@ -119,14 +346,27 @@ REFERENCES public.users (id)
 ON DELETE CASCADE 
 ON UPDATE CASCADE;
 
-UPDATE public.users SET id = au.id FROM auth.users au WHERE public.users.email = au.email AND public.users.id != au.id;
+UPDATE public.users
+SET id = au.id
+FROM auth.users au
+WHERE public.users.email = au.email
+AND public.users.id != au.id;
 
-CREATE OR REPLACE FUNCTION public.get_current_user_company_id() RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE c_id bigint;
+CREATE OR REPLACE FUNCTION public.get_current_user_company_id()
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  c_id bigint;
 BEGIN
   SELECT company_id INTO c_id FROM public.users WHERE id = auth.uid();
   IF c_id IS NULL THEN
-    SELECT u.company_id INTO c_id FROM public.users u JOIN auth.users au ON u.email = au.email WHERE au.id = auth.uid();
+    SELECT u.company_id INTO c_id 
+    FROM public.users u
+    JOIN auth.users au ON u.email = au.email
+    WHERE au.id = auth.uid();
   END IF;
   RETURN c_id;
 END;
@@ -170,13 +410,12 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
 
                 try {
                     const successful = document.execCommand('copy');
-                    if(successful) {
-                         alert("GÜÇLÜ ONARIM KODU KOPYALANDI!\n\nBu kod hem yetkileri düzeltir hem de bozulan kullanıcı ID'lerini eşitler.\n\nLütfen Supabase > SQL Editor'de çalıştırın.");
+                    if (successful) {
+                        alert("GÜÇLÜ ONARIM KODU KOPYALANDI!\n\nLütfen Supabase > SQL Editor'de çalıştırın.");
                     } else {
                         throw new Error("Kopyalama başarısız");
                     }
                 } catch (err) {
-                    console.error("Kopyalama hatası:", err);
                     alert("Kopyalama başarısız oldu. Lütfen aşağıdaki kodu manuel olarak seçip kopyalayın:\n\n" + sql.substring(0, 100) + "...");
                 }
                 document.body.removeChild(textArea);
@@ -185,14 +424,14 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             return (
                 <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 mb-8 animate-in fade-in slide-in-from-top-4">
                     <div className="flex items-start gap-3">
-                        <div className="text-amber-600 mt-1"><Icon name="alert-triangle" size={24}/></div>
+                        <div className="text-amber-600 mt-1"><Icon name="alert-triangle" size={24} /></div>
                         <div>
                             <h3 className="font-bold text-amber-800 text-sm">Veritabanı İzin Sorunu Mu Var?</h3>
                             <p className="text-amber-700 text-xs mt-1 mb-3">
-                                Eğer "Kaydetme Hatası" veya "Yetkiniz Yok" uyarısı alıyorsanız, veritabanı izinlerini ve kullanıcı eşleşmelerini onarmanız gerekir.
+                                Eğer "Kaydetme Hatası" alıyorsanız, bu kodu çalıştırarak veritabanı izinlerini onarabilirsiniz.
                             </p>
                             <button onClick={copySql} className="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-amber-700 flex items-center gap-1 transition">
-                                <Icon name="database" size={14}/> Onarım Kodunu Kopyala (Tam Çözüm)
+                                <Icon name="database" size={14} /> Onarım Kodunu Kopyala (Tam Çözüm)
                             </button>
                         </div>
                     </div>
@@ -228,11 +467,11 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                 }
             }, [companyId, type]);
 
-            useEffect(() => { if(companyId) fetchItems(); }, [fetchItems]);
+            useEffect(() => { if (companyId) fetchItems(); }, [fetchItems]);
 
             const addItem = async () => {
                 if ((type !== 'company_cards' && !newItem.name) || (type === 'company_cards' && !newItem.last4)) return;
-                
+
                 if (type === 'company_cards' && newItem.last4.length < 4) return alert("Kart son 4 hanesi en az 4 rakam olmalı.");
 
                 if (!companyId) {
@@ -242,17 +481,17 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
 
                 setLoading(true);
                 let payload = { company_id: parseInt(companyId) };
-                
+
                 if (type === 'categories') {
                     payload.name = newItem.name;
                 }
-                if (type === 'projects') { 
-                    payload.name = newItem.name; 
+                if (type === 'projects') {
+                    payload.name = newItem.name;
                 }
-                if (type === 'company_cards') { 
-                    payload.bank_name = 'Kredi Kartı'; 
-                    payload.card_alias = `Kart ${newItem.last4}`; 
-                    payload.last_4_digits = newItem.last4; 
+                if (type === 'company_cards') {
+                    payload.bank_name = 'Kredi Kartı';
+                    payload.card_alias = `Kart ${newItem.last4}`;
+                    payload.last_4_digits = newItem.last4;
                 }
 
                 try {
@@ -264,9 +503,9 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                         } else {
                             alert("Hata: " + error.message);
                         }
-                    } else { 
-                        setNewItem({ name: '', last4: '' }); 
-                        fetchItems(); 
+                    } else {
+                        setNewItem({ name: '', last4: '' });
+                        fetchItems();
                     }
                 } catch (err) {
                     console.error("Beklenmeyen hata:", err);
@@ -277,7 +516,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             };
 
             const deleteItem = async (id) => {
-                if(!confirm("Silmek istediğinize emin misiniz?")) return;
+                if (!confirm("Silmek istediğinize emin misiniz?")) return;
                 try {
                     const { error } = await sb.from(type).delete().eq('id', id);
                     if (error) {
@@ -293,27 +532,27 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             return (
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
                     <div className="flex items-center gap-2 mb-4 text-slate-800 border-b pb-2">
-                        <Icon name={icon} size={20} className="text-primary"/> <h3 className="font-bold">{title}</h3>
+                        <Icon name={icon} size={20} className="text-primary" /> <h3 className="font-bold">{title}</h3>
                     </div>
-                    
+
                     <div className="flex gap-2 mb-4">
                         {type === 'company_cards' ? (
-                            <input 
-                                className="border p-2 rounded text-sm w-full" 
-                                placeholder="Kart Son 4 Rakam (Örn: 4492)" 
-                                maxLength="4" 
-                                value={newItem.last4} 
-                                onChange={e=>setNewItem({...newItem, last4:e.target.value.replace(/\D/g,'')})} 
+                            <input
+                                className="border p-2 rounded text-sm w-full"
+                                placeholder="Kart Son 4 Rakam (Örn: 4492)"
+                                maxLength="4"
+                                value={newItem.last4}
+                                onChange={e => setNewItem({ ...newItem, last4: e.target.value.replace(/\D/g, '') })}
                             />
                         ) : (
-                            <input 
-                                className="border p-2 rounded text-sm w-full" 
-                                placeholder={`${title} Adı`} 
-                                value={newItem.name} 
-                                onChange={e=>setNewItem({...newItem, name:e.target.value})} 
+                            <input
+                                className="border p-2 rounded text-sm w-full"
+                                placeholder={`${title} Adı`}
+                                value={newItem.name}
+                                onChange={e => setNewItem({ ...newItem, name: e.target.value })}
                             />
                         )}
-                        <button onClick={addItem} disabled={loading} className="bg-green-600 text-white px-4 rounded hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"><Icon name="plus" size={18}/></button>
+                        <button onClick={addItem} disabled={loading} className="bg-green-600 text-white px-4 rounded hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"><Icon name="plus" size={18} /></button>
                     </div>
 
                     <ul className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
@@ -322,7 +561,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                 <span>
                                     {type === 'company_cards' ? `**** **** **** ${i.last_4_digits}` : i.name}
                                 </span>
-                                <button onClick={()=>deleteItem(i.id)} className="text-red-400 hover:text-red-600"><Icon name="trash-2" size={16}/></button>
+                                <button onClick={() => deleteItem(i.id)} className="text-red-400 hover:text-red-600"><Icon name="trash-2" size={16} /></button>
                             </li>
                         ))}
                         {items.length === 0 && <li className="text-slate-400 text-xs text-center">Henüz kayıt yok.</li>}
@@ -330,13 +569,6 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                 </div>
             );
         };
-
-        const StatCard = ({ title, value, icon, color, bg }) => (
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-                <div className={`p-4 rounded-full ${bg} ${color}`}><Icon name={icon} size={24} /></div>
-                <div><p className="text-slate-500 text-sm font-medium">{title}</p><p className="text-2xl font-bold text-slate-800">{value}</p></div>
-            </div>
-        );
 
         const TeamManagement = ({ user, profile }) => {
             const [users, setUsers] = useState([]);
@@ -348,7 +580,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             const [deleting, setDeleting] = useState(null);
 
             const fetchTeam = useCallback(async () => {
-                if(!profile?.company_id) return;
+                if (!profile?.company_id) return;
                 setLoading(true);
                 try {
                     const { data: comp, error: compError } = await sb.from('companies').select('*').eq('id', profile.company_id).single();
@@ -359,7 +591,6 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                 } catch (err) {
                     console.error("Ekip verisi hatası:", err);
                 }
-                
                 setLoading(false);
             }, [profile?.company_id]);
 
@@ -367,14 +598,14 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
 
             const handleAddUser = async (e) => {
                 if (!company) { alert("Şirket bilgileri yüklenemedi. Lütfen veritabanı izinlerini (RLS) kontrol edin."); return; }
-                const maxUsers = company.max_users || 5; 
+                const maxUsers = company.max_users || 5;
                 if (users.length >= maxUsers) { alert(`Şirket kullanıcı limitinize (${maxUsers}) ulaştınız. Daha fazla kullanıcı ekleyemezsiniz.`); return; }
                 setAdding(true);
-                
+
                 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
                 const forceTest = e && e.shiftKey;
-                const targetUrl = forceTest ? N8N_ADD_USER_URLS.TEST : (isLocalhost ? N8N_ADD_USER_URLS.TEST : N8N_ADD_USER_URLS.PROD);
-                
+                const targetUrl = forceTest ? WEBHOOKS.ADD_USER.TEST : (isLocalhost ? WEBHOOKS.ADD_USER.TEST : WEBHOOKS.ADD_USER.PROD);
+
                 try {
                     await fetch(targetUrl, {
                         method: 'POST',
@@ -398,12 +629,12 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             };
 
             const handleDeleteUser = async (userIdToDelete, e) => {
-                if(!confirm("Bu kullanıcıyı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
+                if (!confirm("Bu kullanıcıyı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
                 setDeleting(userIdToDelete);
-                
+
                 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
                 const forceTest = e && e.shiftKey;
-                const targetUrl = forceTest ? N8N_DELETE_USER_URLS.TEST : (isLocalhost ? N8N_DELETE_USER_URLS.TEST : N8N_DELETE_USER_URLS.PROD);
+                const targetUrl = forceTest ? WEBHOOKS.DELETE_USER.TEST : (isLocalhost ? WEBHOOKS.DELETE_USER.TEST : WEBHOOKS.DELETE_USER.PROD);
 
                 try {
                     await fetch(targetUrl, {
@@ -437,16 +668,19 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                         <td className="px-6 py-4 font-medium text-slate-800">{u.full_name || '-'}</td><td className="px-6 py-4 text-slate-600">{u.email}</td>
                                         <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{u.role === 'admin' ? 'Yönetici' : 'Personel'}</span></td>
                                         <td className="px-6 py-4">
-                                            {u.status === 'active' || u.status === 'onaylandi' ? <span className="text-green-600 flex items-center gap-1"><Icon name="check-circle" size={14}/> Aktif</span> : <span className="text-orange-500 flex items-center gap-1"><Icon name="clock" size={14}/> Beklemede</span>}
+                                            {u.status === 'pending' || u.status === 'beklemede' ?
+                                                <span className="text-orange-500 flex items-center gap-1"><Icon name="clock" size={14} /> Beklemede</span> :
+                                                <span className="text-green-600 flex items-center gap-1"><Icon name="check-circle" size={14} /> Aktif</span>
+                                            }
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             {u.id !== user.id && (
-                                                <button 
-                                                    onClick={(e) => handleDeleteUser(u.id, e)} 
+                                                <button
+                                                    onClick={(e) => handleDeleteUser(u.id, e)}
                                                     disabled={deleting === u.id}
                                                     className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded transition disabled:opacity-50"
                                                 >
-                                                    {deleting === u.id ? <Icon name="loader-2" size={16} className="animate-spin"/> : <Icon name="trash-2" size={16} />}
+                                                    {deleting === u.id ? <Icon name="loader-2" size={16} className="animate-spin" /> : <Icon name="trash-2" size={16} />}
                                                 </button>
                                             )}
                                         </td>
@@ -460,15 +694,15 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                             <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md animate-in fade-in zoom-in duration-200">
                                 <h3 className="text-lg font-bold mb-4">Yeni Kullanıcı Ekle</h3>
                                 <div className="space-y-3">
-                                    <input type="text" placeholder="Ad Soyad" className="w-full p-2 border rounded" value={newUser.full_name} onChange={e=>setNewUser({...newUser, full_name:e.target.value})} />
-                                    <input type="email" placeholder="E-Posta" className="w-full p-2 border rounded" value={newUser.email} onChange={e=>setNewUser({...newUser, email:e.target.value})} />
-                                    <input type="text" placeholder="Telefon (5XX...)" className="w-full p-2 border rounded" value={newUser.phone} onChange={e=>setNewUser({...newUser, phone:e.target.value})} />
-                                    <input type="password" placeholder="Geçici Şifre" className="w-full p-2 border rounded" value={newUser.password} onChange={e=>setNewUser({...newUser, password:e.target.value})} />
-                                    <select className="w-full p-2 border rounded" value={newUser.role} onChange={e=>setNewUser({...newUser, role:e.target.value})}><option value="user">Personel</option><option value="admin">Yönetici</option></select>
+                                    <input type="text" placeholder="Ad Soyad" className="w-full p-2 border rounded" value={newUser.full_name} onChange={e => setNewUser({ ...newUser, full_name: e.target.value })} />
+                                    <input type="email" placeholder="E-Posta" className="w-full p-2 border rounded" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} />
+                                    <input type="text" placeholder="Telefon (5XX...)" className="w-full p-2 border rounded" value={newUser.phone} onChange={e => setNewUser({ ...newUser, phone: e.target.value })} />
+                                    <input type="password" placeholder="Geçici Şifre" className="w-full p-2 border rounded" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} />
+                                    <select className="w-full p-2 border rounded" value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })}><option value="user">Personel</option><option value="admin">Yönetici</option></select>
                                 </div>
                                 <div className="mt-6 flex justify-end gap-2">
-                                    <button onClick={()=>setShowAddModal(false)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded">İptal</button>
-                                    <button onClick={(e) => handleAddUser(e)} disabled={adding} className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-700 flex items-center gap-2">{adding ? <Icon name="loader-2" className="loading-spin" size={16}/> : <Icon name="user-plus" size={16}/>} Ekle</button>
+                                    <button onClick={() => setShowAddModal(false)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded">İptal</button>
+                                    <button onClick={(e) => handleAddUser(e)} disabled={adding} className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-700 flex items-center gap-2">{adding ? <Icon name="loader-2" className="loading-spin" size={16} /> : <Icon name="user-plus" size={16} />} Ekle</button>
                                 </div>
                             </div>
                         </div>
@@ -505,19 +739,19 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             const [pan, setPan] = useState({ x: 0, y: 0 });
             const [isDragging, setIsDragging] = useState(false);
             const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-            
+
             const [metaCategories, setMetaCategories] = useState([]);
             const [metaProjects, setMetaProjects] = useState([]);
 
             useEffect(() => {
                 if (profile?.company_id) {
-                    sb.from('categories').select('*').eq('company_id', profile.company_id).then(({data}) => setMetaCategories(data || []));
-                    sb.from('projects').select('*').eq('company_id', profile.company_id).then(({data}) => setMetaProjects(data || []));
+                    sb.from('categories').select('*').eq('company_id', profile.company_id).then(({ data }) => setMetaCategories(data || []));
+                    sb.from('projects').select('*').eq('company_id', profile.company_id).then(({ data }) => setMetaProjects(data || []));
                 }
             }, [profile?.company_id]);
 
             useEffect(() => { if (editItem) { setImgRotation(0); setImgZoom(1); setPan({ x: 0, y: 0 }); lucide.createIcons(); } }, [editItem]);
-            useEffect(() => { lucide.createIcons(); }, [imgRotation, imgZoom, pan]);
+            useEffect(() => { lucide.createIcons(); }, [imgRotation, imgZoom, pan, filtered, loading]);
             const handleMouseDown = (e) => { e.preventDefault(); setIsDragging(true); setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }); };
             const handleMouseMove = (e) => { if (!isDragging) return; e.preventDefault(); setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }); };
             const handleMouseUp = () => { setIsDragging(false); };
@@ -560,8 +794,8 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                 const categories = updatedItem.ocr_detaylari?.map(l => l.kategori).filter(Boolean) || [];
                 const uniqueCategories = [...new Set(categories)];
                 updatedItem.kategori = uniqueCategories.length > 1 ? 'Çoklu' : (uniqueCategories[0] || 'Genel');
-                if(onLocalUpdate) onLocalUpdate(updatedItem);
-                setEditItem(null); 
+                if (onLocalUpdate) onLocalUpdate(updatedItem);
+                setEditItem(null);
                 try {
                     await supabase.from('fisler').update({
                         isletme_adi: updatedItem.isletme_adi,
@@ -569,15 +803,15 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                         tarih: updatedItem.tarih,
                         durum: updatedItem.durum,
                         kategori: updatedItem.kategori,
-                        proje: updatedItem.proje, 
+                        proje: updatedItem.proje,
                         ocr_detaylari: updatedItem.ocr_detaylari,
-                        fis_no: updatedItem.fis_no // --- EKLENEN FİŞ NO ---
+                        fis_no: updatedItem.fis_no
                     }).eq('id', updatedItem.id);
-                    if (refresh) refresh(); 
+                    if (refresh) refresh();
                 } catch (e) { alert("Hata: " + e.message); if (refresh) refresh(); } finally { setIsSaving(false); }
             };
 
-            const addLine = () => setEditItem({ ...editItem, ocr_detaylari: [...(editItem.ocr_detaylari||[]), {aciklama:'', kategori:'', kdv:18, tutar:0}] });
+            const addLine = () => setEditItem({ ...editItem, ocr_detaylari: [...(editItem.ocr_detaylari || []), { aciklama: '', kategori: '', kdv: 18, tutar: 0 }] });
             const removeLine = (idx) => { const lines = [...editItem.ocr_detaylari]; lines.splice(idx, 1); setEditItem({ ...editItem, ocr_detaylari: lines }); };
             const updateLine = (idx, key, val) => { const lines = [...editItem.ocr_detaylari]; lines[idx][key] = val; setEditItem({ ...editItem, ocr_detaylari: lines }); };
 
@@ -594,12 +828,12 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                 </tr>
                                 {!simple && (
                                     <tr className="bg-slate-100">
-                                        <th className="px-2"><input placeholder="Yıl-Ay-Gün" className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, tarih:e.target.value})}/></th>
-                                        <th className="px-2"><input placeholder="Ara..." className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, isletme_adi:e.target.value})}/></th>
-                                        <th className="px-2"><select className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, kategori:e.target.value})}><option value="">Hepsi</option>{metaCategories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select></th>
-                                        <th className="px-2"><input placeholder="Son 4..." className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, kart_son_4:e.target.value})}/></th>
-                                        <th className="px-2"><input placeholder="Tutar..." className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, toplam_tutar:e.target.value})}/></th>
-                                        <th className="px-2"><select className="w-full p-1 border rounded" onChange={e=>setFilters({...filters, durum:e.target.value})}><option value="">Hepsi</option><option value="beklemede">Beklemede</option><option value="onaylandi">Onaylandı</option><option value="reddedildi">Reddedildi</option><option value="mukerrer">Mükerrer</option><option value="rapor alindi">Rapor Alındı</option></select></th>
+                                        <th className="px-2"><input placeholder="Yıl-Ay-Gün" className="w-full p-1 border rounded" onChange={e => setFilters({ ...filters, tarih: e.target.value })} /></th>
+                                        <th className="px-2"><input placeholder="Ara..." className="w-full p-1 border rounded" onChange={e => setFilters({ ...filters, isletme_adi: e.target.value })} /></th>
+                                        <th className="px-2"><select className="w-full p-1 border rounded" onChange={e => setFilters({ ...filters, kategori: e.target.value })}><option value="">Hepsi</option>{metaCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></th>
+                                        <th className="px-2"><input placeholder="Son 4..." className="w-full p-1 border rounded" onChange={e => setFilters({ ...filters, kart_son_4: e.target.value })} /></th>
+                                        <th className="px-2"><input placeholder="Tutar..." className="w-full p-1 border rounded" onChange={e => setFilters({ ...filters, toplam_tutar: e.target.value })} /></th>
+                                        <th className="px-2"><select className="w-full p-1 border rounded" onChange={e => setFilters({ ...filters, durum: e.target.value })}><option value="">Hepsi</option><option value="beklemede">Beklemede</option><option value="onaylandi">Onaylandı</option><option value="reddedildi">Reddedildi</option><option value="mukerrer">Mükerrer</option><option value="rapor alindi">Rapor Alındı</option></select></th>
                                         <th></th>
                                     </tr>
                                 )}
@@ -607,8 +841,8 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                             <tbody className="divide-y divide-slate-100">
                                 {filtered.map(r => (
                                     <tr key={r.id} className="hover:bg-slate-50 transition group">
-                                        <td className="px-6 py-4">{new Date(r.tarih).toLocaleDateString('tr-TR')}</td><td className="px-6 py-4 font-medium">{r.isletme_adi}</td><td className="px-6 py-4 text-slate-500">{r.kategori || '-'}</td><td className="px-6 py-4 text-slate-500">{r.kart_son_4 || '-'}</td><td className="px-6 py-4 font-bold">{r.toplam_tutar?.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td><td className="px-6 py-4">{getStatusBadge(r.durum)}</td>
-                                        {!simple && <td className="px-6 py-4 text-right"><button onClick={()=>setEditItem(JSON.parse(JSON.stringify(r)))} className="text-primary hover:bg-blue-50 p-2 rounded"><Icon name="pencil" size={16}/></button></td>}
+                                        <td className="px-6 py-4">{new Date(r.tarih).toLocaleDateString('tr-TR')}</td><td className="px-6 py-4 font-medium">{r.isletme_adi}</td><td className="px-6 py-4 text-slate-500">{r.kategori || '-'}</td><td className="px-6 py-4 text-slate-500">{r.kart_son_4 || '-'}</td><td className="px-6 py-4 font-bold">{r.toplam_tutar?.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}</td><td className="px-6 py-4">{getStatusBadge(r.durum)}</td>
+                                        {!simple && <td className="px-6 py-4 text-right"><button onClick={() => setEditItem(JSON.parse(JSON.stringify(r)))} className="text-primary hover:bg-blue-50 p-2 rounded"><Icon name="pencil" size={16} /></button></td>}
                                     </tr>
                                 ))}
                             </tbody>
@@ -618,27 +852,27 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
                             <div className="bg-white w-full max-w-6xl h-[90vh] rounded-xl flex overflow-hidden shadow-2xl">
                                 <div className="w-1/2 bg-slate-900 flex items-center justify-center relative p-4 overflow-hidden group cursor-move" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
-                                    {editItem.gorsel_url ? <div className="image-container" style={{ transform: `translate(${pan.x}px, ${pan.y}px) rotate(${imgRotation}deg) scale(${imgZoom})`, maxWidth:'100%', maxHeight:'100%', display:'flex', alignItems:'center', justifyContent:'center', transition: isDragging?'none':'transform 0.2s ease-out' }}><img src={editItem.gorsel_url} className="max-w-full max-h-full object-contain shadow-lg pointer-events-none" /></div> : <p className="text-white">Görsel Yok</p>}
-                                    {editItem.gorsel_url && <a href={editItem.gorsel_url} target="_blank" className="absolute top-4 right-4 bg-white/10 p-2 rounded text-white hover:bg-white/20 transition z-10" onMouseDown={e=>e.stopPropagation()}><Icon name="external-link" size={20}/></a>}
-                                    <div className="absolute bottom-6 flex items-center gap-2 bg-slate-800/90 p-2 rounded-full backdrop-blur-sm border border-white/10 shadow-xl z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" onMouseDown={e=>e.stopPropagation()}><button onClick={()=>setImgZoom(z=>Math.max(0.5,z-0.25))} className="p-2 text-white"><Icon name="zoom-out"/></button><button onClick={()=>setImgZoom(z=>Math.min(3,z+0.25))} className="p-2 text-white"><Icon name="zoom-in"/></button><button onClick={()=>{setImgZoom(1);setImgRotation(0);setPan({x:0,y:0})}} className="p-2 text-white"><Icon name="refresh-ccw"/></button><button onClick={()=>setImgRotation(r=>r+90)} className="p-2 text-white"><Icon name="rotate-cw"/></button></div>
+                                    {editItem.gorsel_url ? <div className="image-container" style={{ transform: `translate(${pan.x}px, ${pan.y}px) rotate(${imgRotation}deg) scale(${imgZoom})`, maxWidth: '100%', maxHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: isDragging ? 'none' : 'transform 0.2s ease-out' }}><img src={editItem.gorsel_url} className="max-w-full max-h-full object-contain shadow-lg pointer-events-none" /></div> : <p className="text-white">Görsel Yok</p>}
+                                    {editItem.gorsel_url && <a href={editItem.gorsel_url} target="_blank" className="absolute top-4 right-4 bg-white/10 p-2 rounded text-white hover:bg-white/20 transition z-10" onMouseDown={e => e.stopPropagation()}><Icon name="external-link" size={20} /></a>}
+                                    <div className="absolute bottom-6 flex items-center gap-2 bg-slate-800/90 p-2 rounded-full backdrop-blur-sm border border-white/10 shadow-xl z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" onMouseDown={e => e.stopPropagation()}><button onClick={() => setImgZoom(z => Math.max(0.5, z - 0.25))} className="p-2 text-white"><Icon name="zoom-out" /></button><button onClick={() => setImgZoom(z => Math.min(3, z + 0.25))} className="p-2 text-white"><Icon name="zoom-in" /></button><button onClick={() => { setImgZoom(1); setImgRotation(0); setPan({ x: 0, y: 0 }) }} className="p-2 text-white"><Icon name="refresh-ccw" /></button><button onClick={() => setImgRotation(r => r + 90)} className="p-2 text-white"><Icon name="rotate-cw" /></button></div>
                                 </div>
                                 <div className="w-1/2 flex flex-col bg-white">
-                                    <div className="p-4 border-b flex justify-between items-center"><h3 className="font-bold text-lg">Fiş Detayları</h3><button onClick={()=>setEditItem(null)}><Icon name="x"/></button></div>
+                                    <div className="p-4 border-b flex justify-between items-center"><h3 className="font-bold text-lg">Fiş Detayları</h3><button onClick={() => setEditItem(null)}><Icon name="x" /></button></div>
                                     <div className="flex-1 overflow-y-auto p-6 space-y-6">
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div><label className="text-xs text-slate-500">İşletme</label><input className="w-full border p-2 rounded" value={editItem.isletme_adi} onChange={e=>setEditItem({...editItem, isletme_adi:e.target.value})} /></div>
-                                            <div><label className="text-xs text-slate-500">Tarih</label><input type="datetime-local" className="w-full border p-2 rounded" value={editItem.tarih ? editItem.tarih.slice(0,16) : ''} onChange={e=>setEditItem({...editItem, tarih:e.target.value})} /></div>
-                                            
+                                            <div><label className="text-xs text-slate-500">İşletme</label><input className="w-full border p-2 rounded" value={editItem.isletme_adi} onChange={e => setEditItem({ ...editItem, isletme_adi: e.target.value })} /></div>
+                                            <div><label className="text-xs text-slate-500">Tarih</label><input type="datetime-local" className="w-full border p-2 rounded" value={editItem.tarih ? editItem.tarih.slice(0, 16) : ''} onChange={e => setEditItem({ ...editItem, tarih: e.target.value })} /></div>
+
                                             {/* --- YENİ EKLENEN FİŞ NO ALANI --- */}
-                                            <div><label className="text-xs text-slate-500">Fiş No</label><input className="w-full border p-2 rounded" value={editItem.fis_no || ''} onChange={e=>setEditItem({...editItem, fis_no:e.target.value})} /></div>
-                                            
-                                            <div><label className="text-xs text-slate-500">Tutar</label><input type="number" step="0.01" className="w-full border p-2 rounded font-bold" value={editItem.toplam_tutar} onChange={e=>setEditItem({...editItem, toplam_tutar:e.target.value})} /></div>
-                                            <div><label className="text-xs text-slate-500">Durum</label><select className="w-full border p-2 rounded" value={editItem.durum} onChange={e=>setEditItem({...editItem, durum:e.target.value})}><option value="beklemede">Beklemede</option><option value="onaylandi">Onaylandı</option><option value="reddedildi">Reddedildi</option><option value="mukerrer">Mükerrer</option><option value="rapor alindi">Rapor Alındı</option></select></div>
-                                            
+                                            <div><label className="text-xs text-slate-500">Fiş No</label><input className="w-full border p-2 rounded" value={editItem.fis_no || ''} onChange={e => setEditItem({ ...editItem, fis_no: e.target.value })} /></div>
+
+                                            <div><label className="text-xs text-slate-500">Tutar</label><input type="number" step="0.01" className="w-full border p-2 rounded font-bold" value={editItem.toplam_tutar} onChange={e => setEditItem({ ...editItem, toplam_tutar: e.target.value })} /></div>
+                                            <div><label className="text-xs text-slate-500">Durum</label><select className="w-full border p-2 rounded" value={editItem.durum} onChange={e => setEditItem({ ...editItem, durum: e.target.value })}><option value="beklemede">Beklemede</option><option value="onaylandi">Onaylandı</option><option value="reddedildi">Reddedildi</option><option value="mukerrer">Mükerrer</option><option value="rapor alindi">Rapor Alındı</option></select></div>
+
                                             {/* PROJE SEÇİMİ (YENİ) */}
                                             <div>
                                                 <label className="text-xs text-slate-500">Proje</label>
-                                                <select className="w-full border p-2 rounded bg-white" value={editItem.proje || ''} onChange={e=>setEditItem({...editItem, proje:e.target.value})}>
+                                                <select className="w-full border p-2 rounded bg-white" value={editItem.proje || ''} onChange={e => setEditItem({ ...editItem, proje: e.target.value })}>
                                                     <option value="">Seçiniz</option>
                                                     {metaProjects.map(p => <option key={p.id} value={p.name}>{p.name} ({p.code})</option>)}
                                                     <option value="Genel">Genel</option>
@@ -647,20 +881,20 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
 
                                             <div className="col-span-1"><label className="text-xs text-slate-500">Genel Kategori (Otomatik)</label><input className="w-full border p-2 rounded bg-slate-50 text-slate-500" value={editItem.kategori || 'Otomatik'} disabled /></div>
                                         </div>
-                                        <hr/>
+                                        <hr />
                                         <div>
                                             <div className="flex justify-between mb-2 items-center">
                                                 <h4 className="font-bold text-sm text-slate-700">Harcama Kalemleri</h4>
-                                                <button onClick={addLine} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-full hover:bg-blue-100 transition font-medium flex items-center gap-1"><Icon name="plus" size={14}/> Ekle</button>
+                                                <button onClick={addLine} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-full hover:bg-blue-100 transition font-medium flex items-center gap-1"><Icon name="plus" size={14} /> Ekle</button>
                                             </div>
                                             <div className="space-y-2 mb-3">
                                                 <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-400 px-1"><div className="col-span-4">Açıklama</div><div className="col-span-3">Kategori</div><div className="col-span-2">KDV</div><div className="col-span-2">Tutar</div><div className="col-span-1"></div></div>
                                                 {(editItem.ocr_detaylari || []).map((line, i) => (
                                                     <div key={i} className="grid grid-cols-12 gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-100 group">
-                                                        <div className="col-span-4"><input className="w-full bg-transparent border-b border-transparent focus:border-blue-300 outline-none text-sm transition" value={line.aciklama||line.UrunTuru||''} onChange={e=>updateLine(i,'aciklama',e.target.value)} placeholder="Ürün Adı" /></div>
+                                                        <div className="col-span-4"><input className="w-full bg-transparent border-b border-transparent focus:border-blue-300 outline-none text-sm transition" value={line.aciklama || line.UrunTuru || ''} onChange={e => updateLine(i, 'aciklama', e.target.value)} placeholder="Ürün Adı" /></div>
                                                         <div className="col-span-3">
                                                             {/* Kategori Dropdown'ı Güncellendi */}
-                                                            <select className="w-full bg-transparent border-b border-transparent focus:border-blue-300 outline-none text-sm cursor-pointer" value={line.kategori||''} onChange={e=>updateLine(i,'kategori',e.target.value)}>
+                                                            <select className="w-full bg-transparent border-b border-transparent focus:border-blue-300 outline-none text-sm cursor-pointer" value={line.kategori || ''} onChange={e => updateLine(i, 'kategori', e.target.value)}>
                                                                 <option value="">Seçiniz</option>
                                                                 {metaCategories.length > 0 ? metaCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>) : (
                                                                     <>
@@ -669,18 +903,18 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                                                 )}
                                                             </select>
                                                         </div>
-                                                        <div className="col-span-2"><input type="number" className="w-full bg-transparent border-b border-transparent focus:border-blue-300 outline-none text-sm" value={line.kdv||line.KDVOrani||0} onChange={e=>updateLine(i,'kdv',e.target.value)} /></div>
-                                                        <div className="col-span-2"><input type="number" className="w-full bg-transparent border-b border-transparent focus:border-blue-300 outline-none text-sm font-medium" value={line.tutar||line.Tutar_KDVDahil||0} onChange={e=>updateLine(i,'tutar',e.target.value)} /></div>
-                                                        <div className="col-span-1 text-right"><button onClick={()=>removeLine(i)} className="text-slate-400 hover:text-red-500 transition opacity-0 group-hover:opacity-100"><Icon name="trash-2" size={16}/></button></div>
+                                                        <div className="col-span-2"><input type="number" className="w-full bg-transparent border-b border-transparent focus:border-blue-300 outline-none text-sm" value={line.kdv || line.KDVOrani || 0} onChange={e => updateLine(i, 'kdv', e.target.value)} /></div>
+                                                        <div className="col-span-2"><input type="number" className="w-full bg-transparent border-b border-transparent focus:border-blue-300 outline-none text-sm font-medium" value={line.tutar || line.Tutar_KDVDahil || 0} onChange={e => updateLine(i, 'tutar', e.target.value)} /></div>
+                                                        <div className="col-span-1 text-right"><button onClick={() => removeLine(i)} className="text-slate-400 hover:text-red-500 transition opacity-0 group-hover:opacity-100"><Icon name="trash-2" size={16} /></button></div>
                                                     </div>
                                                 ))}
                                             </div>
-                                            
+
                                             {/* YENİ EKLENEN BÜYÜK BUTON */}
                                             <button onClick={addLine} className="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition flex items-center justify-center gap-2 text-sm font-medium"><Icon name="plus-circle" size={18} /> Yeni Satır Ekle</button>
                                         </div>
                                     </div>
-                                    <div className="p-4 border-t flex justify-end gap-2"><button onClick={()=>setEditItem(null)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded">İptal</button><button onClick={handleSave} disabled={isSaving} className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2">{isSaving?<><Icon name="loader-2" className="loading-spin"/> Kaydediliyor...</>:'Kaydet'}</button></div>
+                                    <div className="p-4 border-t flex justify-end gap-2"><button onClick={() => setEditItem(null)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded">İptal</button><button onClick={handleSave} disabled={isSaving} className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2">{isSaving ? <><Icon name="loader-2" className="loading-spin" /> Kaydediliyor...</> : 'Kaydet'}</button></div>
                                 </div>
                             </div>
                         </div>
@@ -689,81 +923,229 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             );
         };
 
-        const ReportCard = ({ user, profile }) => {
-            const [dates, setDates] = useState({ start: '', end: '' });
+        // --- REPORT PAGE (HTML2PDF) ---
+        const ReportPage = ({ user, profile }) => {
+            const [dates, setDates] = useState({ start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] });
             const [loading, setLoading] = useState(false);
-            
-            // Modified to accept the event object 'e'
-            const sendReport = async (e) => {
-                if(!dates.start || !dates.end) return alert("Lütfen tarih aralığı seçiniz.");
+            const [reportData, setReportData] = useState(null);
+            const [activeTab, setActiveTab] = useState('all'); // all, cards, projects
+            const [companyCards, setCompanyCards] = useState([]);
+
+            // Verileri Çek ve Grupla
+            const generateReport = async () => {
+                if (!profile?.company_id) return;
                 setLoading(true);
-                const payload = { company_id: profile?.company_id || null, start: dates.start, end: dates.end, email: user.email || 'kullanici@mail.com', source: 'FisMatik_Panel' };
-                const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-                const forceTest = e && e.shiftKey;
-                const targetUrl = forceTest ? N8N_REPORT_WEBHOOK_TEST : (isLocalhost ? N8N_REPORT_WEBHOOK_TEST : N8N_REPORT_WEBHOOK_PROD);
+
                 try {
-                    await fetch(targetUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                    const envMsg = forceTest ? "(TEST ORTAMI)" : ""; alert(`Rapor isteğiniz alındı ${envMsg}. Raporunuz hazırlandığında mail adresinize gönderilecektir.`);
-                } catch (error) { console.error("Webhook hatası:", error); alert("Rapor isteğiniz alındı."); } finally { setLoading(false); }
+                    // 1. Şirket Kartlarını Çek
+                    const { data: cards } = await sb.from('company_cards').select('*').eq('company_id', profile.company_id);
+                    setCompanyCards(cards || []);
+                    const cardNumbers = new Set((cards || []).map(c => c.last_4_digits));
+
+                    // 2. Fişleri Çek
+                    let query = sb.from('fisler').select('*')
+                        .eq('company_id', profile.company_id)
+                        .gte('tarih', dates.start)
+                        .lte('tarih', dates.end + ' 23:59:59')
+                        .order('tarih', { ascending: true });
+
+                    const { data: fisler } = await query;
+
+                    if (fisler) {
+                        // GRUPLAMA MANTIĞI
+                        let cardGroups = {};
+                        let projectGroups = {};
+                        let allItems = [];
+
+                        fisler.forEach(f => {
+                            const isCC = (f.odeme_tipi === 'Kredi Kartı' || f.odeme_tipi === 'Kredi Karti');
+                            const isCompanyCard = isCC && f.kart_son_4 && cardNumbers.has(f.kart_son_4);
+
+                            // Genel Listeye Ekle
+                            allItems.push(f);
+
+                            if (isCompanyCard) {
+                                const key = f.kart_son_4;
+                                if (!cardGroups[key]) cardGroups[key] = { title: `Kredi Kartı - ${key}`, items: [], total: 0 };
+                                cardGroups[key].items.push(f);
+                                cardGroups[key].total += f.toplam_tutar;
+                            } else {
+                                const key = (f.proje && f.proje !== "Seçiniz") ? f.proje : "Genel/Belirsiz";
+                                if (!projectGroups[key]) projectGroups[key] = { title: `Proje - ${key}`, items: [], total: 0 };
+                                projectGroups[key].items.push(f);
+                                projectGroups[key].total += f.toplam_tutar;
+                            }
+                        });
+
+                        setReportData({ cardGroups, projectGroups, allItems });
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("Rapor oluşturulurken hata oluştu.");
+                } finally {
+                    setLoading(false);
+                }
             };
-            return (
-                <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm text-center"><div className="inline-block p-4 bg-blue-50 rounded-full text-primary mb-4"><Icon name="mail" size={32} /></div><h2 className="text-xl font-bold text-slate-800 mb-2">Rapor Oluştur</h2><div className="flex gap-4 mb-6"><div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Başlangıç</label><input type="date" className="w-full border p-2 rounded mt-1" value={dates.start} onChange={e=>setDates({...dates, start:e.target.value})} /></div><div className="w-1/2 text-left"><label className="text-xs font-semibold text-slate-500">Bitiş</label><input type="date" className="w-full border p-2 rounded mt-1" value={dates.end} onChange={e=>setDates({...dates, end:e.target.value})} /></div></div><button onClick={sendReport} disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition flex justify-center gap-2">{loading ? <><Icon name="loader-2" className="loading-spin" size={18} /> Gönderiliyor...</> : <><Icon name="send" size={18} /> Raporu E-Postala</>}</button></div>
-            );
-        };
 
-        const Settings = ({ user, profile }) => {
-            const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_key') || '');
-            const [saved, setSaved] = useState(false);
-            const [newPassword, setNewPassword] = useState('');
-            const [confirmPassword, setConfirmPassword] = useState('');
-            const [passLoading, setPassLoading] = useState(false);
-            const [passMsg, setPassMsg] = useState({ type: '', text: '' });
-            const saveSettings = () => { localStorage.setItem('gemini_key', apiKey); setSaved(true); setTimeout(() => setSaved(false), 2000); };
-            const handleChangePassword = async (e) => { e.preventDefault(); if (newPassword !== confirmPassword) { setPassMsg({ type: 'error', text: 'Şifreler eşleşmiyor.' }); return; } if (newPassword.length < 6) { setPassMsg({ type: 'error', text: 'Şifre en az 6 karakter olmalı.' }); return; } setPassLoading(true); setPassMsg({ type: '', text: '' }); const { error } = await sb.auth.updateUser({ password: newPassword }); if (error) setPassMsg({ type: 'error', text: 'Hata: ' + error.message }); else { setPassMsg({ type: 'success', text: 'Şifre güncellendi.' }); setNewPassword(''); setConfirmPassword(''); } setPassLoading(false); };
+            const downloadPDF = () => {
+                const element = document.getElementById('printable-area');
+                const opt = {
+                    margin: 5,
+                    filename: `Fismatik_Rapor_${dates.start}_${dates.end}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2 },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+                html2pdf().set(opt).from(element).save();
+            };
 
-            return (
-                <div className="max-w-2xl mx-auto mt-10 space-y-8">
-                    {/* METADATA AYARLARI (YENİ) - GÜNCELLENDİ: Hata Yönetimi Ekli */}
-                    <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
-                        <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full text-primary"><Icon name="list" size={24} /></div><div><h2 className="text-xl font-bold text-slate-800">Tanımlamalar</h2><p className="text-sm text-slate-500">Kategoriler, Projeler ve Kartlar</p></div></div>
-                        <DatabaseFix />
-                        <MetadataSettings companyId={profile?.company_id} type="categories" title="Kategoriler" icon="tag" />
-                        <MetadataSettings companyId={profile?.company_id} type="projects" title="Projeler" icon="folder" />
-                        <MetadataSettings companyId={profile?.company_id} type="company_cards" title="Şirket Kartları" icon="credit-card" />
+            const formatMoney = (amount) => {
+                return amount?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
+            };
+
+            const ReportTable = ({ title, items, total }) => (
+                <div className="report-page mb-8 break-inside-avoid">
+                    <div className="border-b-2 border-slate-800 pb-4 mb-4 flex justify-between items-end">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800">{profile?.company_name || "Şirket Adı"}</h2>
+                            <p className="text-slate-500 text-sm">Harcama Raporu</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="font-bold text-lg">{title}</p>
+                            <p className="text-xs text-slate-500">{new Date().toLocaleDateString('tr-TR')}</p>
+                        </div>
                     </div>
 
-                    <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm"><div className="flex items-center gap-3 mb-6"><div className="p-3 bg-slate-100 rounded-full text-slate-600"><Icon name="sparkles" size={24} /></div><div><h2 className="text-xl font-bold text-slate-800">Yapay Zeka</h2><p className="text-sm text-slate-500">Analiz için API anahtarı</p></div></div><div className="space-y-4"><div><label className="block text-sm font-medium text-slate-700 mb-1">Google Gemini API Anahtarı</label><input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="AIzaSy..." className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-ai outline-none font-mono text-sm"/></div><button onClick={saveSettings} className="px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition flex items-center gap-2">{saved ? <Icon name="check" size={18} /> : <Icon name="save" size={18} />} {saved ? 'Kaydedildi' : 'Kaydet'}</button></div></div>
-                    <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm"><div className="flex items-center gap-3 mb-6"><div className="p-3 bg-slate-100 rounded-full text-slate-600"><Icon name="lock" size={24} /></div><div><h2 className="text-xl font-bold text-slate-800">Güvenlik</h2><p className="text-sm text-slate-500">Şifrenizi güncelleyin</p></div></div><form onSubmit={handleChangePassword} className="space-y-4"><div><label className="block text-sm font-medium text-slate-700 mb-1">Yeni Şifre</label><input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary outline-none" required /></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Yeni Şifre (Tekrar)</label><input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary outline-none" required /></div>{passMsg.text && (<div className={`p-3 rounded text-sm ${passMsg.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{passMsg.text}</div>)}<button disabled={passLoading} className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">{passLoading ? <Icon name="loader-2" className="loading-spin" /> : 'Şifreyi Güncelle'}</button></form></div>
+                    <div className="mb-4 text-xs text-slate-500 flex gap-4">
+                        <span className="bg-slate-100 px-2 py-1 rounded">Başlangıç: <b>{dates.start}</b></span>
+                        <span className="bg-slate-100 px-2 py-1 rounded">Bitiş: <b>{dates.end}</b></span>
+                    </div>
+
+                    <table className="w-full text-left text-xs mb-6">
+                        <thead className="border-b-2 border-slate-200 text-slate-500 uppercase">
+                            <tr>
+                                <th className="py-2">Tarih</th>
+                                <th className="py-2">Fiş No</th>
+                                <th className="py-2">İşletme</th>
+                                <th className="py-2">Açıklama</th>
+                                <th className="py-2">Kategori</th>
+                                <th className="py-2 text-right">Tutar</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {items.map(item => (
+                                <tr key={item.id}>
+                                    <td className="py-2">{new Date(item.tarih).toLocaleDateString('tr-TR')}</td>
+                                    <td className="py-2">{item.fis_no || '-'}</td>
+                                    <td className="py-2 font-medium">{item.isletme_adi}</td>
+                                    <td className="py-2 text-slate-500 truncate max-w-[150px]">
+                                        {item.ocr_detaylari?.map(d => d.aciklama || d.UrunTuru).join(', ')}
+                                    </td>
+                                    <td className="py-2">{item.kategori}</td>
+                                    <td className="py-2 text-right font-bold">{formatMoney(item.toplam_tutar)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                        <tfoot className="border-t-2 border-slate-800 font-bold">
+                            <tr>
+                                <td colSpan="5" className="py-3 text-right">GENEL TOPLAM:</td>
+                                <td className="py-3 text-right text-lg">{formatMoney(total)}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+
+                    <div className="grid grid-cols-3 gap-8 mt-12 text-center text-xs text-slate-400">
+                        <div>
+                            <p className="font-bold mb-8 text-slate-800">TESLİM EDEN</p>
+                            <div className="border-t border-slate-300 pt-2">İmza</div>
+                        </div>
+                        <div>
+                            <p className="font-bold mb-8 text-slate-800">KONTROL EDEN</p>
+                            <div className="border-t border-slate-300 pt-2">İmza</div>
+                        </div>
+                        <div>
+                            <p className="font-bold mb-8 text-slate-800">ONAYLAYAN</p>
+                            <div className="border-t border-slate-300 pt-2">İmza</div>
+                        </div>
+                    </div>
                 </div>
             );
-        };
 
-        const Login = ({ onLogin }) => {
-            const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [loading, setLoading] = useState(false); const [error, setError] = useState(''); const [info, setInfo] = useState(''); const [view, setView] = useState('login'); const [regData, setRegData] = useState({ company_name: '', tax_no: '', full_name: '', email: '', password: '', first_name: '', last_name: '', phone: '', tax_office: '' });
-            const shiftKeyRef = useRef(false);
-            const handleLogin = async (e) => { e.preventDefault(); setLoading(true); setError(''); const { data, error } = await sb.auth.signInWithPassword({ email, password }); if (error) setError("Giriş başarısız: " + error.message); setLoading(false); };
-            const handleRegister = async (e) => { e.preventDefault(); setLoading(true); setError(''); const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'; const forceTest = shiftKeyRef.current; shiftKeyRef.current = false; const targetUrl = forceTest ? N8N_REGISTER_URLS.TEST : (isLocalhost ? N8N_REGISTER_URLS.TEST : N8N_REGISTER_URLS.PROD); const payload = { "telegram_id": "", "Adınız": regData.first_name, "Soyadınız": regData.last_name, "Mail Adresiniz": regData.email, "Telefon Numaranız": normalizePhone(regData.phone), "Şirketiniz": regData.company_name, "Vergi Dairesi": regData.tax_office, "Vergi Numarası": regData.tax_no, "password": regData.password }; try { await fetch(targetUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); setInfo("✅ Kayıt talebiniz alındı! Yönetici onayından sonra giriş yapabileceksiniz."); setView('login'); } catch (e) { setError("Kayıt hatası: " + e.message); } setLoading(false); };
-            const handleReset = async (e) => { e.preventDefault(); setLoading(true); setError(''); setInfo(''); const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'; const forceTest = shiftKeyRef.current; shiftKeyRef.current = false; const url = forceTest ? N8N_RESET_PW_WEBHOOK_TEST : (isLocal ? N8N_RESET_PW_WEBHOOK_TEST : N8N_RESET_PW_WEBHOOK_PROD); try { await fetch(url, { method: 'POST', mode: 'no-cors', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, source: 'FisMatik_Login_Reset' }) }); setInfo(`✅ Talep gönderildi.${forceTest?'(T)':''}`); } catch (e) { setError("Hata."); } setLoading(false); };
             return (
-                <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
-                    <div className="glass-panel p-8 rounded-2xl shadow-xl w-full max-w-sm animate-in fade-in zoom-in duration-300">
-                        {view === 'login' && (<><div className="flex justify-center mb-4 text-primary"><Icon name="receipt" size={48} /></div><h1 className="text-2xl font-bold text-center text-slate-800 mb-2">FişMatik</h1><p className="text-center text-slate-500 text-sm mb-6">Akıllı Müşteri Paneline Giriş</p><form onSubmit={handleLogin} className="space-y-4"><input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg" required /><input type="password" placeholder="Şifre" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-3 border rounded-lg" required />{info && <div className="p-3 bg-green-50 text-green-700 text-xs rounded border border-green-100">{info}</div>}{error && <p className="text-red-500 text-xs">{error}</p>}<button disabled={loading} className="w-full bg-primary text-white py-3 rounded-lg">{loading ? <Icon name="loader-2" className="loading-spin"/> : 'Giriş Yap'}</button><div className="flex flex-col gap-2 mt-4 text-center"><button type="button" onClick={()=>setView('forgot')} className="text-xs text-slate-500 hover:text-primary">Şifremi Unuttum</button><div className="flex justify-between mt-2"><button type="button" onClick={()=>setView('register')} className="text-sm text-primary font-bold hover:underline">Kayıt Ol</button><button type="button" onClick={()=>setView('about')} className="text-sm text-slate-600 hover:underline">FişMatik Nedir?</button></div></div></form></>)}
-                        {view === 'register' && (<><div className="flex justify-center mb-4 text-purple-600"><Icon name="user-plus" size={48} /></div><h2 className="text-xl font-bold text-center mb-4">Yeni Hesap Oluştur</h2>
-                            <form onSubmit={handleRegister} className="space-y-3">
-                                <div className="flex gap-2"><input type="text" placeholder="Adınız" className="w-1/2 p-3 border rounded-lg text-sm" value={regData.first_name} onChange={e=>setRegData({...regData, first_name:e.target.value})} required /><input type="text" placeholder="Soyadınız" className="w-1/2 p-3 border rounded-lg text-sm" value={regData.last_name} onChange={e=>setRegData({...regData, last_name:e.target.value})} required /></div>
-                                <input type="email" placeholder="E-Posta" className="w-full p-3 border rounded-lg text-sm" value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})} required /><input type="text" placeholder="Telefon (5XX...)" className="w-full p-3 border rounded-lg text-sm" value={regData.phone} onChange={e=>setRegData({...regData, phone:e.target.value})} required /><input type="text" placeholder="Şirket Adı" className="w-full p-3 border rounded-lg text-sm mt-4" value={regData.company_name} onChange={e=>setRegData({...regData, company_name:e.target.value})} required /><div className="flex gap-2"><input type="text" placeholder="Vergi Dairesi" className="w-1/2 p-3 border rounded-lg text-sm" value={regData.tax_office} onChange={e=>setRegData({...regData, tax_office:e.target.value})} required /><input type="text" placeholder="Vergi No / T.C." className="w-1/2 p-3 border rounded-lg text-sm" value={regData.tax_no} onChange={e=>setRegData({...regData, tax_no:e.target.value})} required /></div><input type="password" placeholder="Şifre Belirleyin" className="w-full p-3 border rounded-lg text-sm mt-2" value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})} required />{error && <p className="text-red-500 text-xs">{error}</p>}
-                                {/* onClick ile Shift kontrolü yapıyoruz, type="button" ile form submit'i engelliyoruz */}
-                                <button type="button" disabled={loading} onClick={(e) => { shiftKeyRef.current = e.shiftKey; handleRegister(e); }} className="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition">{loading ? <Icon name="loader-2" className="loading-spin"/> : 'Kayıt Ol ve Onaya Gönder'}</button>
-                                <button type="button" onClick={()=>setView('login')} className="w-full text-slate-500 text-sm mt-2">Girişe Dön</button>
-                            </form>
-                        </>)}
-                        {view === 'forgot' && (<form onSubmit={handleReset} className="space-y-4"><h3 className="text-center font-bold">Şifre Sıfırlama</h3><input type="email" placeholder="E-Posta" value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-lg" required />
-                            {/* onClick ile Shift kontrolü yapıyoruz */}
-                            <button type="button" disabled={loading} onClick={(e) => { shiftKeyRef.current = e.shiftKey; handleReset(e); }} className="w-full bg-primary text-white py-3 rounded-lg">Link Gönder</button>
-                            <button type="button" onClick={()=>setView('login')} className="w-full text-slate-500 text-sm">İptal</button></form>
-                        )}
-                        {view === 'about' && (<div className="text-left"><div className="flex items-center gap-2 mb-4 text-primary"><button onClick={()=>setView('login')} className="p-1 hover:bg-blue-50 rounded-full"><Icon name="arrow-left" size={20} /></button><span className="font-bold text-lg">Hakkımızda</span></div><div className="max-h-[60vh] overflow-y-auto pr-2 space-y-6 custom-scrollbar"><AboutContent /></div></div>)}
+                <div className="flex flex-col h-full">
+                    {/* Üst Bar */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6 flex justify-between items-center">
+                        <div className="flex gap-4 items-center">
+                            <div className="bg-blue-100 p-2 rounded-lg text-primary"><Icon name="file-bar-chart-2" /></div>
+                            <div>
+                                <h2 className="font-bold text-slate-800">Rapor Merkezi</h2>
+                                <p className="text-xs text-slate-500">Tarih aralığı seçip raporu görüntüleyin.</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <input type="date" className="border rounded p-2 text-sm" value={dates.start} onChange={e => setDates({ ...dates, start: e.target.value })} />
+                            <input type="date" className="border rounded p-2 text-sm" value={dates.end} onChange={e => setDates({ ...dates, end: e.target.value })} />
+                            <button onClick={generateReport} disabled={loading} className="bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-900 flex gap-2 items-center">
+                                {loading ? <Icon name="loader-2" className="animate-spin" /> : <Icon name="search" />} Getir
+                            </button>
+                            {reportData && (
+                                <button onClick={downloadPDF} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 flex gap-2 items-center">
+                                    <Icon name="file-down" /> PDF İndir
+                                </button>
+                            )}
+                        </div>
                     </div>
+
+                    {/* Rapor İçeriği */}
+                    {reportData ? (
+                        <div className="flex-1 overflow-auto bg-slate-500/10 p-4 rounded-xl relative">
+
+                            {/* Sekmeler */}
+                            <div className="flex gap-2 mb-4 sticky top-0 z-10 bg-slate-50/90 backdrop-blur p-2 rounded-lg border">
+                                <button onClick={() => setActiveTab('all')} className={`px-3 py-1 rounded text-sm ${activeTab === 'all' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}`}>Tümünü Göster</button>
+                                <button onClick={() => setActiveTab('cards')} className={`px-3 py-1 rounded text-sm ${activeTab === 'cards' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}`}>Şirket Kartları</button>
+                                <button onClick={() => setActiveTab('projects')} className={`px-3 py-1 rounded text-sm ${activeTab === 'projects' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}`}>Projeler</button>
+                            </div>
+
+                            {/* Yazdırılacak Alan */}
+                            <div id="printable-area">
+                                {/* Kart Raporları */}
+                                {(activeTab === 'all' || activeTab === 'cards') && Object.keys(reportData.cardGroups).map(key => (
+                                    <ReportTable
+                                        key={key}
+                                        title={reportData.cardGroups[key].title}
+                                        items={reportData.cardGroups[key].items}
+                                        total={reportData.cardGroups[key].total}
+                                    />
+                                ))}
+
+                                {/* Proje Raporları */}
+                                {(activeTab === 'all' || activeTab === 'projects') && Object.keys(reportData.projectGroups).map(key => (
+                                    <ReportTable
+                                        key={key}
+                                        title={reportData.projectGroups[key].title}
+                                        items={reportData.projectGroups[key].items}
+                                        total={reportData.projectGroups[key].total}
+                                    />
+                                ))}
+
+                                {/* Genel Liste (Sadece 'Tümünü Göster'de en sonda çıksın istenirse) */}
+                                {activeTab === 'all' && (
+                                    <ReportTable
+                                        title="GENEL DÖKÜM LİSTESİ"
+                                        items={reportData.allItems}
+                                        total={reportData.allItems.reduce((a, b) => a + b.toplam_tutar, 0)}
+                                    />
+                                )}
+                            </div>
+
+                        </div>
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+                            <Icon name="file-search" size={48} className="mb-4 opacity-50" />
+                            <p>Rapor oluşturmak için tarih seçip "Getir" butonuna basın.</p>
+                        </div>
+                    )}
                 </div>
             );
         };
@@ -772,56 +1154,138 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             const [view, setView] = useState('dashboard');
             const [receipts, setReceipts] = useState([]);
             const [loading, setLoading] = useState(true);
-            const [stats, setStats] = useState({ total:0, count:0, pending:0 });
+            const [stats, setStats] = useState({ total: 0, count: 0, pending: 0 });
             const [aiAnalysis, setAiAnalysis] = useState(null);
             const [aiLoading, setAiLoading] = useState(false);
 
             const fetchData = useCallback(async () => {
-                if(!user?.id) { setLoading(false); return; }
+                if (!user?.id) { setLoading(false); return; }
                 setLoading(true);
                 try {
-                    console.log("Veri çekiliyor...", { userId: user.id, companyId: profile?.company_id });
                     let q = sb.from('fisler').select('*').order('tarih', { ascending: false });
-                    if (profile?.company_id) { q = q.eq('company_id', profile.company_id); console.log("Şirket bazlı sorgu:", profile.company_id); } 
-                    else { q = q.eq('user_id', user.id); console.log("Kullanıcı bazlı sorgu:", user.id); }
+                    if (profile?.company_id) { q = q.eq('company_id', profile.company_id); }
+                    else { q = q.eq('user_id', user.id); }
                     const { data, error } = await q;
-                    if (error) { console.error("Veri çekme hatası:", error); setReceipts([]); setStats({ total: 0, count: 0, pending: 0 }); } 
-                    else { console.log("Gelen Fişler:", data?.length || 0, "adet"); setReceipts(data || []); const total = (data||[]).reduce((a,b)=>a+(b.toplam_tutar||0),0); const pending = (data||[]).filter(r=>r.durum==='beklemede').length; setStats({ total, count: (data||[]).length, pending }); }
-                } catch(e) { console.error("Beklenmeyen hata:", e); setReceipts([]); setStats({ total: 0, count: 0, pending: 0 }); } 
+                    if (!error) {
+                        setReceipts(data || []);
+                        const total = (data || []).reduce((a, b) => a + (b.toplam_tutar || 0), 0);
+                        const pending = (data || []).filter(r => r.durum === 'beklemede').length;
+                        setStats({ total, count: (data || []).length, pending });
+                    } else { setReceipts([]); }
+                } catch (e) { setReceipts([]); }
                 finally { setLoading(false); }
             }, [user?.id, profile?.company_id]);
 
-            const handleLocalUpdate = (updatedItem) => { setReceipts(prev => prev.map(r => r.id === updatedItem.id ? updatedItem : r)); };
-            const runAiAnalysis = async () => { const apiKey = localStorage.getItem('gemini_key'); if(!apiKey) return alert("API Anahtarı eksik."); setAiLoading(true); const data = { total: stats.total, count: stats.count, recent: receipts.slice(0,10) }; const prompt = `Analiz et: ${JSON.stringify(data)}. Türkçe, Markdown.`; try { const res = await callGemini(apiKey, prompt); setAiAnalysis(res); } catch(e) { alert(e.message); } setAiLoading(false); };
+            const handleLocalUpdate = (updatedItem) => {
+                setReceipts(prev => prev.map(r => r.id === updatedItem.id ? updatedItem : r));
+            };
+
+            const runAiAnalysis = async () => {
+                const apiKey = localStorage.getItem('fismatik_gemini_key');
+                if (!apiKey) {
+                    alert("Yapay zeka analizini kullanabilmek için Ayarlar sayfasından Gemini API anahtarınızı tanımlamanız gerekmektedir.");
+                    return;
+                }
+
+                setAiLoading(true);
+                setAiAnalysis(null);
+
+                try {
+                    const recentReceipts = receipts.slice(0, 20);
+                    const receiptsSummary = recentReceipts.map(r =>
+                        `- Tarih: ${r.tarih}, İşletme: ${r.isletme_adi}, Tutar: ${r.toplam_tutar} TL, Kategori: ${r.kategori}`
+                    ).join('\n');
+
+                    const prompt = `Aşağıdaki son harcama fişi verilerini analiz et ve bana şunları içeren kısa bir özet rapor sun:
+                    1. Harcamalarımın genel özeti.
+                    2. En çok hangi kategoride harcama yapılmış?
+                    3. Tasarruf için 3 spesifik öneri.
+                    4. Gelecek ay için tahmini harcama uyarısı.
+
+                    Yanıtını Markdown formatında, profesyonel bir tonda ve Türkçe ver.
+
+                    Veriler:
+                    ${receiptsSummary}`;
+
+                    const result = await callGemini(apiKey, prompt);
+                    setAiAnalysis(result);
+                } catch (err) {
+                    console.error("AI Analiz Hatası:", err);
+                    alert("Analiz sırasında bir hata oluştu: " + err.message);
+                } finally {
+                    setAiLoading(false);
+                }
+            };
+
             useEffect(() => { fetchData(); }, [fetchData]);
-            useEffect(() => { lucide.createIcons(); }, [view, receipts, aiAnalysis]);
+            useEffect(() => { lucide.createIcons(); }, [view, receipts]);
 
             return (
                 <div className="min-h-screen flex flex-col md:flex-row">
                     <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col z-20">
                         <div className="p-6 flex items-center gap-2 border-b border-slate-100"><Icon name="receipt" className="text-primary" /><span className="font-bold text-lg text-slate-800">FişMatik</span></div>
                         <nav className="flex-1 p-4 space-y-1">
-                            {['dashboard','receipts','reports','team','settings','about'].map(v => {
+                            {['dashboard', 'receipts', 'reports', 'team', 'settings', 'about'].map(v => {
                                 if (v === 'team' && profile?.role !== 'admin') return null;
-                                return ( <button key={v} onClick={()=>setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view===v?'bg-blue-50 text-primary':'text-slate-600 hover:bg-slate-50'}`}><Icon name={v==='dashboard'?'layout-dashboard':v==='receipts'?'file-text':v==='reports'?'bar-chart-3':v==='team'?'users':v==='settings'?'settings':'info'} size={18}/> {v==='dashboard'?'Genel Bakış':v==='receipts'?'Fişlerim':v==='reports'?'Raporlar':v==='team'?'Ekip Yönetimi':v==='settings'?'Ayarlar':'Hakkında'}</button> )
+                                return (<button key={v} onClick={() => setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view === v ? 'bg-blue-50 text-primary' : 'text-slate-600 hover:bg-slate-50'}`}><Icon name={v === 'dashboard' ? 'layout-dashboard' : v === 'receipts' ? 'file-text' : v === 'reports' ? 'bar-chart-3' : v === 'team' ? 'users' : v === 'settings' ? 'settings' : 'info'} size={18} /> {v === 'dashboard' ? 'Genel Bakış' : v === 'receipts' ? 'Fişlerim' : v === 'reports' ? 'Raporlar' : v === 'team' ? 'Ekip Yönetimi' : v === 'settings' ? 'Ayarlar' : 'Hakkında'}</button>)
                             })}
                         </nav>
-                        <div className="p-4 border-t"><div className="mb-4 text-xs text-slate-500"><p className="font-bold text-slate-800 truncate">{profile?.full_name || user.email}</p><p>Rol: {profile?.role || 'User'}</p></div><button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16}/> Çıkış</button></div>
+                        <div className="p-4 border-t"><div className="mb-4 text-xs text-slate-500"><p className="font-bold text-slate-800 truncate">{profile?.full_name || user.email}</p><p>Rol: {profile?.role || 'User'}</p></div><button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16} /> Çıkış</button></div>
                     </aside>
                     <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen bg-slate-50">
-                        {view==='dashboard' && (
+                        {view === 'dashboard' && (
                             <div className="space-y-6">
-                                <div className="flex justify-between items-center"><h2 className="text-2xl font-bold">Hoş Geldiniz</h2><button onClick={runAiAnalysis} disabled={aiLoading} className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded shadow flex gap-2 items-center">{aiLoading?<Icon name="loader-2" className="loading-spin"/>:<Icon name="sparkles"/>} Analiz</button></div>
-                                {aiAnalysis && <div className="bg-white p-6 rounded border border-violet-100 shadow ai-glow relative"><div className="text-sm markdown-body" dangerouslySetInnerHTML={{__html:marked.parse(aiAnalysis)}}></div><button onClick={()=>setAiAnalysis(null)} className="absolute top-4 right-4"><Icon name="x"/></button></div>}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><StatCard title="Toplam Harcama" value={stats.total.toLocaleString('tr-TR',{style:'currency',currency:'TRY'})} icon="wallet" color="text-green-600" bg="bg-green-50"/><StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50"/><StatCard title="Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50"/></div>
-                                <div className="bg-white p-6 rounded border shadow-sm"><h3 className="font-bold mb-4">Son Hareketler</h3><ReceiptsTable receipts={receipts.slice(0,5)} loading={loading} simple={true} /></div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><StatCard title="Toplam Harcama" value={stats.total.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })} icon="wallet" color="text-green-600" bg="bg-green-50" /><StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50" /><StatCard title="Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50" /></div>
+                                <div className="bg-white p-6 rounded border shadow-sm"><h3 className="font-bold mb-4">Son Hareketler</h3><ReceiptsTable receipts={receipts.slice(0, 5)} loading={loading} simple={true} profile={profile} /></div>
+
+                                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-hidden relative group">
+                                    <div className="flex justify-between items-center mb-6 border-b pb-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-purple-100 text-purple-600 rounded-lg"><Icon name="sparkles" size={20} /></div>
+                                            <div>
+                                                <h3 className="font-bold text-slate-800">Yapay Zeka Harcama Analizi</h3>
+                                                <p className="text-xs text-slate-500">Google Gemini ile harcamalarınızı optimize edin.</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={runAiAnalysis}
+                                            disabled={aiLoading || receipts.length === 0}
+                                            className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 transition flex items-center gap-2 disabled:opacity-50"
+                                        >
+                                            {aiLoading ? <Icon name="loader-2" className="animate-spin" size={18} /> : <Icon name="zap" size={18} />}
+                                            Analizi Başlat
+                                        </button>
+                                    </div>
+
+                                    {aiLoading && (
+                                        <div className="py-12 flex flex-col items-center justify-center text-slate-400 animate-pulse">
+                                            <Icon name="brain-circuit" size={48} className="mb-4 text-purple-300" />
+                                            <p>Yapay zeka verileri inceliyor ve strateji oluşturuyor...</p>
+                                        </div>
+                                    )}
+
+                                    {aiAnalysis && (
+                                        <div className="bg-slate-50 p-6 rounded-xl border border-purple-100 prose prose-slate max-w-none animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                            <div dangerouslySetInnerHTML={{ __html: marked.parse(aiAnalysis) }} className="markdown-body" />
+                                        </div>
+                                    )}
+
+                                    {!aiAnalysis && !aiLoading && (
+                                        <div className="py-8 text-center border-2 border-dashed border-slate-100 rounded-xl">
+                                            <p className="text-slate-400 text-sm">Hala analiz yapılmadı. "Analizi Başlat" butonuna tıklayarak ilk raporunuzu alın.</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
-                        {view==='receipts' && <div className="bg-white rounded border shadow-sm p-4 h-full flex flex-col"><div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Fiş Kayıtları</h2><button onClick={fetchData}><Icon name="refresh-ccw"/></button></div><ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData} onLocalUpdate={handleLocalUpdate} userRole={profile?.role} profile={profile} /></div>}
-                        {view==='reports' && <div className="max-w-xl mx-auto mt-10"><ReportCard user={user} profile={profile}/></div>}
-                        {view==='team' && <div className="max-w-4xl mx-auto mt-5"><TeamManagement user={user} profile={profile} /></div>}
-                        {view==='settings' && <Settings user={user} profile={profile} />}
-                        {view==='about' && <div className="max-w-3xl mx-auto bg-white p-8 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in duration-300"><div className="text-center mb-8 border-b border-slate-100 pb-6"><h2 className="text-2xl font-bold text-slate-800">Hakkımızda</h2></div><AboutContent /></div>}
+                        {view === 'receipts' && <div className="bg-white rounded border shadow-sm p-4 h-full flex flex-col"><div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Fiş Kayıtları</h2><button onClick={fetchData}><Icon name="refresh-ccw" /></button></div><ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData} onLocalUpdate={handleLocalUpdate} userRole={profile?.role} profile={profile} /></div>}
+
+                        {/* YENİ RAPOR SAYFASI BURADA ÇAĞRILIYOR */}
+                        {view === 'reports' && <ReportPage user={user} profile={profile} />}
+
+                        {view === 'team' && <div className="max-w-4xl mx-auto mt-5"><TeamManagement user={user} profile={profile} /></div>}
+                        {view === 'settings' && <Settings user={user} profile={profile} />}
+                        {view === 'about' && <div className="max-w-3xl mx-auto bg-white p-8 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in duration-300"><div className="text-center mb-8 border-b border-slate-100 pb-6"><h2 className="text-2xl font-bold text-slate-800">Hakkımızda</h2></div><AboutContent /></div>}
                     </main>
                 </div>
             );
@@ -834,56 +1298,48 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             const [profileLoading, setProfileLoading] = useState(true);
 
             const fetchProfile = useCallback(async (u) => {
-                if(!u?.id) return;
+                if (!u?.id) return;
                 setProfileLoading(true);
                 try {
-                    console.log("Profil Yükleniyor...", u.id);
                     let { data, error } = await sb.from('users').select('*').eq('id', u.id).limit(1);
-                    if(error || !data || data.length === 0) {
-                        console.log("Profil ID ile bulunamadı, email ile deneniyor...", u.email);
+                    if (error || !data || data.length === 0) {
                         const res = await sb.from('users').select('*').eq('email', u.email).limit(1);
-                        if(res.data && res.data.length > 0) { data = res.data; error = res.error; }
+                        if (res.data && res.data.length > 0) data = res.data;
                     }
-                    if(data && data.length > 0) {
+                    if (data && data.length > 0) {
                         const userProfile = data[0];
-                        console.log("Profil Bulundu:", userProfile);
-                        if (userProfile.status === 'pending' || userProfile.status === 'beklemede') { setPendingApproval(true); setProfile(userProfile); } 
+                        if (userProfile.status === 'pending' || userProfile.status === 'beklemede') { setPendingApproval(true); setProfile(userProfile); }
                         else { setPendingApproval(false); setProfile(userProfile); }
-                    } else { console.warn("Profil bulunamadı"); setProfile(null); }
-                } catch(e) { console.error("Profil Fetch Exception:", e); setProfile(null); }
+                    } else { setProfile(null); }
+                } catch (e) { setProfile(null); }
                 finally { setProfileLoading(false); }
             }, []);
 
             useEffect(() => {
                 let mounted = true;
-                sb.auth.getUser().then(({data}) => { 
-                    if(mounted && data?.user) { setUser(data.user); fetchProfile(data.user); } 
+                sb.auth.getUser().then(({ data }) => {
+                    if (mounted && data?.user) { setUser(data.user); fetchProfile(data.user); }
                     else { setProfileLoading(false); }
                 });
-                const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => { 
-                    if(!mounted) return;
-                    if(session?.user) { setUser(session.user); fetchProfile(session.user); } 
+                const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => {
+                    if (!mounted) return;
+                    if (session?.user) { setUser(session.user); fetchProfile(session.user); }
                     else { setUser(null); setProfile(null); setPendingApproval(false); setProfileLoading(false); }
                 });
-                return () => { mounted = false; if(subscription) subscription.unsubscribe(); };
+                return () => { mounted = false; if (subscription) subscription.unsubscribe(); };
             }, [fetchProfile]);
 
             if (profileLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="text-center"><Icon name="loader-2" className="animate-spin h-10 w-10 text-primary mx-auto mb-4" /><p className="text-slate-500">Yükleniyor...</p></div></div>;
-            if(!user) return <Login onLogin={()=>{}} />;
+            if (!user) return <Login onLogin={() => { }} />;
             if (pendingApproval) {
-                return (
-                    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-                        <div className="bg-white p-8 rounded-xl shadow-xl max-w-md text-center border-t-4 border-yellow-400">
-                            <div className="inline-block p-4 bg-yellow-50 rounded-full text-yellow-600 mb-4"><Icon name="clock" size={40} /></div><h2 className="text-2xl font-bold text-slate-800 mb-2">Onay Bekleniyor</h2><p className="text-slate-600 mb-6">Hesabınız oluşturuldu ancak yönetici onayı bekleniyor. Onaylandığında size e-posta ile bilgi verilecektir.</p><button onClick={()=>sb.auth.signOut()} className="text-slate-500 hover:text-slate-800 underline">Çıkış Yap</button>
-                        </div>
-                    </div>
-                );
+                return <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4"><div className="bg-white p-8 rounded-xl shadow-xl max-w-md text-center border-t-4 border-yellow-400">Onay Bekleniyor...</div></div>;
             }
-            return <Dashboard user={user} profile={profile} onLogout={()=>sb.auth.signOut()} supabase={sb} />;
+            return <Dashboard user={user} profile={profile} onLogout={() => sb.auth.signOut()} supabase={sb} />;
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
 </body>
+
 </html>
