@@ -1509,133 +1509,133 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
 
             return (
                 <div className="min-h-screen flex flex-col md:flex-row">
-                        <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col z-20">
-                            <div className="p-6 flex items-center gap-2 border-b border-slate-100"><Icon name="receipt" className="text-primary" /><span className="font-bold text-lg text-slate-800">FişMatik</span></div>
-                            <nav className="flex-1 p-4 space-y-1">
-                                {['dashboard', 'receipts', 'reports', 'team', 'settings', 'about'].map(v => {
-                                    if (v === 'team' && profile?.role !== 'admin') return null;
-                                    return (<button key={v} onClick={() => setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view === v ? 'bg-blue-50 text-primary' : 'text-slate-600 hover:bg-slate-50'}`}><Icon name={v === 'dashboard' ? 'layout-dashboard' : v === 'receipts' ? 'file-text' : v === 'reports' ? 'bar-chart-3' : v === 'team' ? 'users' : v === 'settings' ? 'settings' : 'info'} size={18} /> {v === 'dashboard' ? 'Genel Bakış' : v === 'receipts' ? 'Fişlerim' : v === 'reports' ? 'Raporlar' : v === 'team' ? 'Ekip Yönetimi' : v === 'settings' ? 'Ayarlar' : 'Hakkında'}</button>)
-                                })}
-                            </nav>
-                            <div className="p-4 border-t"><div className="mb-4 text-xs text-slate-500"><p className="font-bold text-slate-800 truncate">{profile?.full_name || user.email}</p><p>Rol: {profile?.role || 'User'}</p></div><button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16} /> Çıkış</button></div>
-                        </aside>
-                        <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen bg-slate-50">
-                            {view === 'dashboard' && (
-                                <div className="space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><StatCard title="Toplam Harcama" value={stats.total.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })} icon="wallet" color="text-green-600" bg="bg-green-50" /><StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50" /><StatCard title="Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50" /></div>
-                                    <div className="bg-white p-6 rounded border shadow-sm"><h3 className="font-bold mb-4">Son Hareketler</h3><ReceiptsTable receipts={receipts.slice(0, 5)} loading={loading} simple={true} profile={profile} /></div>
+                    <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col z-20">
+                        <div className="p-6 flex items-center gap-2 border-b border-slate-100"><Icon name="receipt" className="text-primary" /><span className="font-bold text-lg text-slate-800">FişMatik</span></div>
+                        <nav className="flex-1 p-4 space-y-1">
+                            {['dashboard', 'receipts', 'reports', 'team', 'settings', 'about'].map(v => {
+                                if (v === 'team' && profile?.role !== 'admin') return null;
+                                return (<button key={v} onClick={() => setView(v)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${view === v ? 'bg-blue-50 text-primary' : 'text-slate-600 hover:bg-slate-50'}`}><Icon name={v === 'dashboard' ? 'layout-dashboard' : v === 'receipts' ? 'file-text' : v === 'reports' ? 'bar-chart-3' : v === 'team' ? 'users' : v === 'settings' ? 'settings' : 'info'} size={18} /> {v === 'dashboard' ? 'Genel Bakış' : v === 'receipts' ? 'Fişlerim' : v === 'reports' ? 'Raporlar' : v === 'team' ? 'Ekip Yönetimi' : v === 'settings' ? 'Ayarlar' : 'Hakkında'}</button>)
+                            })}
+                        </nav>
+                        <div className="p-4 border-t"><div className="mb-4 text-xs text-slate-500"><p className="font-bold text-slate-800 truncate">{profile?.full_name || user.email}</p><p>Rol: {profile?.role || 'User'}</p></div><button onClick={onLogout} className="w-full flex items-center gap-2 text-red-500 text-sm hover:bg-red-50 p-2 rounded transition"><Icon name="log-out" size={16} /> Çıkış</button></div>
+                    </aside>
+                    <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen bg-slate-50">
+                        {view === 'dashboard' && (
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><StatCard title="Toplam Harcama" value={stats.total.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })} icon="wallet" color="text-green-600" bg="bg-green-50" /><StatCard title="Toplam Fiş" value={stats.count} icon="file-stack" color="text-blue-600" bg="bg-blue-50" /><StatCard title="Bekleyen" value={stats.pending} icon="clock" color="text-orange-600" bg="bg-orange-50" /></div>
+                                <div className="bg-white p-6 rounded border shadow-sm"><h3 className="font-bold mb-4">Son Hareketler</h3><ReceiptsTable receipts={receipts.slice(0, 5)} loading={loading} simple={true} profile={profile} /></div>
 
-                                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-hidden relative group">
-                                        <div className="flex justify-between items-center mb-6 border-b pb-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="p-2 bg-purple-100 text-purple-600 rounded-lg"><Icon name="sparkles" size={20} /></div>
-                                                <div>
-                                                    <h3 className="font-bold text-slate-800">Yapay Zeka Harcama Analizi</h3>
-                                                    <p className="text-xs text-slate-500">Google Gemini ile harcamalarınızı optimize edin.</p>
-                                                </div>
+                                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-hidden relative group">
+                                    <div className="flex justify-between items-center mb-6 border-b pb-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-purple-100 text-purple-600 rounded-lg"><Icon name="sparkles" size={20} /></div>
+                                            <div>
+                                                <h3 className="font-bold text-slate-800">Yapay Zeka Harcama Analizi</h3>
+                                                <p className="text-xs text-slate-500">Google Gemini ile harcamalarınızı optimize edin.</p>
                                             </div>
-                                            <button
-                                                onClick={runAiAnalysis}
-                                                disabled={aiLoading || receipts.length === 0}
-                                                className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 transition flex items-center gap-2 disabled:opacity-50"
-                                            >
-                                                {aiLoading ? <Icon name="loader-2" className="animate-spin" size={18} /> : <Icon name="zap" size={18} />}
-                                                Analizi Başlat
-                                            </button>
                                         </div>
-
-                                        {aiLoading && (
-                                            <div className="py-12 flex flex-col items-center justify-center text-slate-400 animate-pulse">
-                                                <Icon name="brain-circuit" size={48} className="mb-4 text-purple-300" />
-                                                <p>Yapay zeka verileri inceliyor ve strateji oluşturuyor...</p>
-                                            </div>
-                                        )}
-
-                                        {aiAnalysis && (
-                                            <div className="bg-slate-50 p-6 rounded-xl border border-purple-100 prose prose-slate max-w-none animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                                <div dangerouslySetInnerHTML={{ __html: marked.parse(aiAnalysis) }} className="markdown-body" />
-                                            </div>
-                                        )}
-
-                                        {!aiAnalysis && !aiLoading && (
-                                            <div className="py-8 text-center border-2 border-dashed border-slate-100 rounded-xl">
-                                                <p className="text-slate-400 text-sm">Hala analiz yapılmadı. "Analizi Başlat" butonuna tıklayarak ilk raporunuzu alın.</p>
-                                            </div>
-                                        )}
+                                        <button
+                                            onClick={runAiAnalysis}
+                                            disabled={aiLoading || receipts.length === 0}
+                                            className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 transition flex items-center gap-2 disabled:opacity-50"
+                                        >
+                                            {aiLoading ? <Icon name="loader-2" className="animate-spin" size={18} /> : <Icon name="zap" size={18} />}
+                                            Analizi Başlat
+                                        </button>
                                     </div>
+
+                                    {aiLoading && (
+                                        <div className="py-12 flex flex-col items-center justify-center text-slate-400 animate-pulse">
+                                            <Icon name="brain-circuit" size={48} className="mb-4 text-purple-300" />
+                                            <p>Yapay zeka verileri inceliyor ve strateji oluşturuyor...</p>
+                                        </div>
+                                    )}
+
+                                    {aiAnalysis && (
+                                        <div className="bg-slate-50 p-6 rounded-xl border border-purple-100 prose prose-slate max-w-none animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                            <div dangerouslySetInnerHTML={{ __html: marked.parse(aiAnalysis) }} className="markdown-body" />
+                                        </div>
+                                    )}
+
+                                    {!aiAnalysis && !aiLoading && (
+                                        <div className="py-8 text-center border-2 border-dashed border-slate-100 rounded-xl">
+                                            <p className="text-slate-400 text-sm">Hala analiz yapılmadı. "Analizi Başlat" butonuna tıklayarak ilk raporunuzu alın.</p>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                            {view === 'receipts' && <div className="bg-white rounded border shadow-sm p-4 h-full flex flex-col"><div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Fiş Kayıtları</h2><button onClick={fetchData}><Icon name="refresh-ccw" /></button></div><ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData} onLocalUpdate={handleLocalUpdate} userRole={profile?.role} profile={profile} /></div>}
+                            </div>
+                        )}
+                        {view === 'receipts' && <div className="bg-white rounded border shadow-sm p-4 h-full flex flex-col"><div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Fiş Kayıtları</h2><button onClick={fetchData}><Icon name="refresh-ccw" /></button></div><ReceiptsTable receipts={receipts} loading={loading} supabase={sb} refresh={fetchData} onLocalUpdate={handleLocalUpdate} userRole={profile?.role} profile={profile} /></div>}
 
-                            {/* YENİ RAPOR SAYFASI BURADA ÇAĞRILIYOR */}
-                            {view === 'reports' && <ReportPage user={user} profile={profile} />}
+                        {/* YENİ RAPOR SAYFASI BURADA ÇAĞRILIYOR */}
+                        {view === 'reports' && <ReportPage user={user} profile={profile} />}
 
-                            {view === 'team' && <div className="max-w-4xl mx-auto mt-5"><TeamManagement user={user} profile={profile} /></div>}
-                            {view === 'settings' && <Settings user={user} profile={profile} />}
-                            {view === 'about' && <div className="max-w-3xl mx-auto bg-white p-8 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in duration-300"><div className="text-center mb-8 border-b border-slate-100 pb-6"><h2 className="text-2xl font-bold text-slate-800">Hakkımızda</h2></div><AboutContent /></div>}
-                        </main>
+                        {view === 'team' && <div className="max-w-4xl mx-auto mt-5"><TeamManagement user={user} profile={profile} /></div>}
+                        {view === 'settings' && <Settings user={user} profile={profile} />}
+                        {view === 'about' && <div className="max-w-3xl mx-auto bg-white p-8 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in duration-300"><div className="text-center mb-8 border-b border-slate-100 pb-6"><h2 className="text-2xl font-bold text-slate-800">Hakkımızda</h2></div><AboutContent /></div>}
+                    </main>
                 </div>
             );
         };
 
-            const App = () => {
-                const [user, setUser] = useState(null);
-                const [profile, setProfile] = useState(null);
-                const [pendingApproval, setPendingApproval] = useState(false);
-                const [profileLoading, setProfileLoading] = useState(true);
-                const [showAbout, setShowAbout] = useState(false);
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [profile, setProfile] = useState(null);
+            const [pendingApproval, setPendingApproval] = useState(false);
+            const [profileLoading, setProfileLoading] = useState(true);
+            const [showAbout, setShowAbout] = useState(false);
 
-                const fetchProfile = useCallback(async (u) => {
-                    if (!u?.id) return;
-                    setProfileLoading(true);
-                    try {
-                        let { data, error } = await sb.from('users').select('*').eq('id', u.id).limit(1);
-                        if (error || !data || data.length === 0) {
-                            const res = await sb.from('users').select('*').eq('email', u.email).limit(1);
-                            if (res.data && res.data.length > 0) data = res.data;
-                        }
-                        if (data && data.length > 0) {
-                            const userProfile = data[0];
-                            if (userProfile.status === 'pending' || userProfile.status === 'beklemede') { setPendingApproval(true); setProfile(userProfile); }
-                            else { setPendingApproval(false); setProfile(userProfile); }
-                        } else { setProfile(null); }
-                    } catch (e) { setProfile(null); }
-                    finally { setProfileLoading(false); }
-                }, []);
+            const fetchProfile = useCallback(async (u) => {
+                if (!u?.id) return;
+                setProfileLoading(true);
+                try {
+                    let { data, error } = await sb.from('users').select('*').eq('id', u.id).limit(1);
+                    if (error || !data || data.length === 0) {
+                        const res = await sb.from('users').select('*').eq('email', u.email).limit(1);
+                        if (res.data && res.data.length > 0) data = res.data;
+                    }
+                    if (data && data.length > 0) {
+                        const userProfile = data[0];
+                        if (userProfile.status === 'pending' || userProfile.status === 'beklemede') { setPendingApproval(true); setProfile(userProfile); }
+                        else { setPendingApproval(false); setProfile(userProfile); }
+                    } else { setProfile(null); }
+                } catch (e) { setProfile(null); }
+                finally { setProfileLoading(false); }
+            }, []);
 
-                useEffect(() => {
-                    let mounted = true;
-                    sb.auth.getUser().then(({ data }) => {
-                        if (mounted && data?.user) { setUser(data.user); fetchProfile(data.user); }
-                        else { setProfileLoading(false); }
-                    });
-                    const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => {
-                        if (!mounted) return;
-                        if (session?.user) { setUser(session.user); fetchProfile(session.user); }
-                        else { setUser(null); setProfile(null); setPendingApproval(false); setProfileLoading(false); }
-                    });
-                    return () => { mounted = false; if (subscription) subscription.unsubscribe(); };
-                }, [fetchProfile]);
+            useEffect(() => {
+                let mounted = true;
+                sb.auth.getUser().then(({ data }) => {
+                    if (mounted && data?.user) { setUser(data.user); fetchProfile(data.user); }
+                    else { setProfileLoading(false); }
+                });
+                const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => {
+                    if (!mounted) return;
+                    if (session?.user) { setUser(session.user); fetchProfile(session.user); }
+                    else { setUser(null); setProfile(null); setPendingApproval(false); setProfileLoading(false); }
+                });
+                return () => { mounted = false; if (subscription) subscription.unsubscribe(); };
+            }, [fetchProfile]);
 
-                const handleForgotPassword = () => {
-                    alert('Şifre sıfırlama için lütfen Telegram botumuz üzerinden destek alın.');
-                };
-
-                const handleRegister = () => {
-                    alert('Yeni kayıt için lütfen Telegram botumuz (@ITT_Fis_matik_BOT) üzerinden başvuru yapın.');
-                };
-
-                if (profileLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="text-center"><Icon name="loader-2" className="animate-spin h-10 w-10 text-primary mx-auto mb-4" /><p className="text-slate-500">Yükleniyor...</p></div></div>;
-                if (showAbout) return <AboutPage onBack={() => setShowAbout(false)} />;
-                if (!user) return <Login onLogin={() => { }} onForgotPassword={handleForgotPassword} onRegister={handleRegister} onAbout={() => setShowAbout(true)} />;
-                if (pendingApproval) {
-                    return <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4"><div className="bg-white p-8 rounded-xl shadow-xl max-w-md text-center border-t-4 border-yellow-400">Onay Bekleniyor...</div></div>;
-                }
-                return <Dashboard user={user} profile={profile} onLogout={() => sb.auth.signOut()} supabase={sb} />;
+            const handleForgotPassword = () => {
+                alert('Şifre sıfırlama için lütfen Telegram botumuz üzerinden destek alın.');
             };
 
-            const root = ReactDOM.createRoot(document.getElementById('root'));
-            root.render(<App />);
+            const handleRegister = () => {
+                alert('Yeni kayıt için lütfen Telegram botumuz (@ITT_Fis_matik_BOT) üzerinden başvuru yapın.');
+            };
+
+            if (profileLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="text-center"><Icon name="loader-2" className="animate-spin h-10 w-10 text-primary mx-auto mb-4" /><p className="text-slate-500">Yükleniyor...</p></div></div>;
+            if (showAbout) return <AboutPage onBack={() => setShowAbout(false)} />;
+            if (!user) return <Login onLogin={() => { }} onForgotPassword={handleForgotPassword} onRegister={handleRegister} onAbout={() => setShowAbout(true)} />;
+            if (pendingApproval) {
+                return <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4"><div className="bg-white p-8 rounded-xl shadow-xl max-w-md text-center border-t-4 border-yellow-400">Onay Bekleniyor...</div></div>;
+            }
+            return <Dashboard user={user} profile={profile} onLogout={() => sb.auth.signOut()} supabase={sb} />;
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 
