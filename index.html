@@ -1022,7 +1022,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                 {filtered.map(r => (
                                     <tr key={r.id} className="hover:bg-slate-50 transition group">
                                         <td className="px-6 py-4">{new Date(r.tarih).toLocaleDateString('tr-TR')}</td><td className="px-6 py-4 font-medium">{r.isletme_adi}</td><td className="px-6 py-4 text-slate-500">{r.kategori || '-'}</td><td className="px-6 py-4 text-slate-500">{r.kart_son_4 || '-'}</td><td className="px-6 py-4 font-bold">{r.toplam_tutar?.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}</td><td className="px-6 py-4">{getStatusBadge(r.durum)}</td>
-                                        {!simple && <td className="px-6 py-4 text-right"><button onClick={() => setEditItem(JSON.parse(JSON.stringify(r)))} className="text-blue-600 hover:bg-blue-50 p-2 rounded transition flex items-center justify-center min-w-[40px] min-h-[40px] border border-blue-200 hover:border-blue-300" title="Düzenle"><Icon name="pencil" size={16} /></button></td>}
+                                        {!simple && <td className="px-6 py-4 text-right"><button onClick={() => setEditItem(JSON.parse(JSON.stringify(r)))} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition font-medium text-sm shadow-sm hover:shadow-md">Düzenle</button></td>}
                                     </tr>
                                 ))}
                             </tbody>
