@@ -172,7 +172,7 @@
             }
         };
 
-        const ReportTable = ({ title, items, total, profile, dates, onExcludeDuplicate, onIncludeDuplicate, duplicateDecisions, showMasterColumns }) => {
+        const ReportTable = ({ title, items, total, profile, company, dates, onExcludeDuplicate, onIncludeDuplicate, duplicateDecisions, showMasterColumns }) => {
             const formatMoney = (amount) => {
                 return amount?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
             };
@@ -190,7 +190,7 @@
                 <div className="report-page mb-8 break-inside-avoid shadow-sm bg-white p-6 rounded-lg border border-slate-100">
                     <div className="border-b-2 border-slate-800 pb-4 mb-4 flex justify-between items-end">
                         <div>
-                            <h2 className="text-2xl font-bold text-slate-800">{profile?.company_name || "Şirket Adı"}</h2>
+                            <h2 className="text-2xl font-bold text-slate-800">{company?.company_name || profile?.company_name || "Şirket Adı"}</h2>
                             <p className="text-slate-500 text-sm">Muhasebe Raporu</p>
                         </div>
                         <div className="text-right">
@@ -1113,6 +1113,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             const [companyCards, setCompanyCards] = useState([]);
             const [duplicateDecisions, setDuplicateDecisions] = useState({});
             const [potentialDuplicates, setPotentialDuplicates] = useState(new Set());
+            const [company, setCompany] = useState(null);
 
             // Parmak izi oluştur (OCR toleranslı)
             const createFingerprint = (fis) => {
@@ -1192,6 +1193,21 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
             const handleIncludeDuplicate = (fisId) => {
                 setDuplicateDecisions({ ...duplicateDecisions, [fisId]: 'include' });
             };
+
+            // Şirket bilgisini çek
+            useEffect(() => {
+                const fetchCompany = async () => {
+                    if (!profile?.company_id) return;
+                    try {
+                        const { data: comp, error: compError } = await sb.from('companies').select('*').eq('id', profile.company_id).single();
+                        if (compError) console.warn("Şirket bilgisi çekilemedi:", compError);
+                        else setCompany(comp);
+                    } catch (err) {
+                        console.error("Şirket bilgisi hatası:", err);
+                    }
+                };
+                fetchCompany();
+            }, [profile?.company_id]);
 
             // Rapor oluştur
             const generateReport = async () => {
@@ -1349,6 +1365,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                         items={reportData.companyCardGroups[key].items}
                                         total={reportData.companyCardGroups[key].total}
                                         profile={profile}
+                                        company={company}
                                         dates={dates}
                                         onExcludeDuplicate={handleExcludeDuplicate}
                                         onIncludeDuplicate={handleIncludeDuplicate}
@@ -1365,6 +1382,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                         items={reportData.projectGroups[key].items}
                                         total={reportData.projectGroups[key].total}
                                         profile={profile}
+                                        company={company}
                                         dates={dates}
                                         onExcludeDuplicate={handleExcludeDuplicate}
                                         onIncludeDuplicate={handleIncludeDuplicate}
@@ -1380,6 +1398,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                         items={reportData.otherGroup}
                                         total={reportData.otherGroup.reduce((a, b) => a + b.toplam_tutar, 0)}
                                         profile={profile}
+                                        company={company}
                                         dates={dates}
                                         onExcludeDuplicate={handleExcludeDuplicate}
                                         onIncludeDuplicate={handleIncludeDuplicate}
@@ -1395,6 +1414,7 @@ CREATE POLICY "Şirketim" ON public.companies FOR SELECT USING (id = get_current
                                         items={reportData.masterList}
                                         total={reportData.masterList.reduce((a, b) => a + b.toplam_tutar, 0)}
                                         profile={profile}
+                                        company={company}
                                         dates={dates}
                                         onExcludeDuplicate={handleExcludeDuplicate}
                                         onIncludeDuplicate={handleIncludeDuplicate}
